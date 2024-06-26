@@ -1,0 +1,2738 @@
+---
+output: 
+  pdf_document:
+    latex_engine: xelatex
+mainfont: Arial
+monofont: Arial
+header-includes:
+    - \usepackage{setspace}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(emojifont)
+library(figpatch)
+library(ggplot2)
+library(patchwork)
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(scales)
+library(regioneR)
+library(Biostrings)
+library(rtracklayer)
+library(ggcoverage)
+library(circlize)
+library(cowplot)
+library(MASS)
+library(Cairo)
+library(rstatix)
+library(viridis)
+library(ggrepel)
+library(gggenes)
+library(ggh4x)
+library(TmCalculator)
+
+
+n = 1000 # Number of permutations
+```
+
+```{r Figure 1, echo=FALSE, fig.height=7, fig.width=7, message=FALSE, warning=FALSE}
+
+### Microscopy figures ###
+
+bf <- fig("Microscopy_figures/BrightField.gif")
+bf <- fig_lab(bf,lab = "Bright-field",pos = "top")
+cfp <- fig("Microscopy_figures/CFP.gif")
+cfp <- fig_lab(cfp,lab = "CFP-MutL",pos = "top")
+mcherry <- fig("Microscopy_figures/mCherry.gif")
+mcherry <- fig_lab(mcherry,lab = "mCherry-DnaN",pos = "top")
+merge <- fig("Microscopy_figures/Merge.gif")
+merge <- fig_lab(merge,lab = "Merge",pos = "top")
+
+micro <- fig_wrap(list(bf + labs(tag = "A"),mcherry,cfp,merge),ncol = 4, b_margin = ggplot2::margin(1,1,1,1))
+
+topleft <- 
+ wrap_plots(bf,mcherry,cfp,merge, nrow = 1)
+
+### Quantification values ###
+
+cell_data <- read_xlsx("Data/DnaN-MutL.xlsx") %>% dplyr::select(DnaN,MutL) %>% na.exclude()
+cell_data$forks[cell_data$DnaN == 0] <- 0
+cell_data$forks[cell_data$DnaN > 0 & cell_data$DnaN < 3]  <- 2
+cell_data$forks[cell_data$DnaN > 2 & cell_data$DnaN < 7]  <- 6
+cell_data$forks[cell_data$DnaN > 6]  <- "≥ 7"
+
+freq_forks <- cell_data %>% add_count(forks) %>% mutate(freq = n/n()) %>% 
+  group_by(freq) %>% mutate(n = n()) %>% dplyr::select(forks,n) %>% unique()
+
+freq_forks$forks <- factor(freq_forks$forks,levels = c("0","2","6","≥ 7"))
+
+B <- 
+  ggbarplot(data = freq_forks, 
+            x = "forks", y = "freq", 
+            fill = "forks",
+            xlab = "Number of replication forks", ylab = "Frequency of cells",size = .25)+
+    scale_y_continuous(limits = c(0,1),breaks = trans_breaks("sqrt", function(x) x^2)(c(0, 1)),transform = "sqrt")+
+    geom_text(aes(label = n), vjust = -1,size = 7/.pt)+
+  labs(fill = "Number of replication forks", tag = "B")+
+  theme(legend.position = "none",legend.key.size = unit(2,units = "mm"),, legend.frame = element_rect(size = 1))
+
+freq_mutL <- cell_data %>% group_by(forks) %>% add_count(MutL) %>% mutate(freq = n/n()) %>% 
+  dplyr::select(-DnaN) %>% unique()
+freq_mutL$forks <- factor(freq_mutL$forks,levels = c("0","2","6","≥ 7"))
+
+C <- 
+  ggbarplot(data = freq_mutL, 
+          x = "MutL", y = "freq", 
+          fill = "forks", 
+          xlab = "Number of MutL foci", ylab = "Frequency of cells",size = .25)+
+  scale_y_continuous(limits = c(0,1),breaks = trans_breaks("sqrt", function(x) x^2)(c(0, 1)),transform = "sqrt")+
+  facet_wrap(~forks,ncol = 2, labeller = labeller(forks = c("0" = "0 Replication forks","2" = "2 Replication forks",
+                                                            "6" = "6 Replication forks","≥ 7" = "≥ 7 Replication forks")))+
+  labs(fill = "Number of replication forks", tag = "C")+
+  theme(legend.position = "none",legend.key.size = unit(2,units = "mm"), legend.frame = element_rect(size = 1))
+
+##### Poisson #####
+
+lambda <-  mean(cell_data$MutL)
+
+MutL <- data.frame(x = cell_data$MutL) 
+
+pois_fit <- data.frame(
+  x = 0:max(cell_data$MutL),
+  y = dpois(0:max(cell_data$MutL), lambda),
+  poisson = "Predicted Poisson distribution"
+)
+
+D <- 
+  gghistogram(data = MutL, x = "x",binwidth = 1,y = "density", 
+              xlab = "Number of MutL foci", ylab = "Frequency of cells",size = .25,) + 
+    scale_y_continuous(limits = c(0,.6),breaks = trans_breaks("sqrt", function(x) x^2)(c(0, .6)),transform = "sqrt")+
+    scale_x_continuous(breaks = c(0:10))+
+    geom_line(data = pois_fit, aes(x = x, y = y, color = poisson), size = .25) +
+    geom_point(data = pois_fit, aes(x = x, y = y, color = poisson), size = .5)+
+    scale_color_manual(values = "red")+
+    theme(legend.title = element_blank(), 
+        legend.position = "inside", legend.position.inside = c(.7,.9))+
+  labs(tag = "D")
+
+# Calculate theoretical quantiles
+theoretical_q <- qpois(ppoints(length(cell_data$MutL)), lambda)
+
+# Create data frame for Q-Q plot
+qq_data <- data.frame(
+  theoretical = theoretical_q,
+  sample = sort(cell_data$MutL)
+)
+
+# Q-Q plot with ggplot2
+E <- 
+  ggscatter(qq_data, x = "theoretical", y = "sample") +
+    geom_point(size = 1) +
+    geom_abline(slope = 1, intercept = 0, color = "red",linewidth = .25) +
+    scale_y_continuous(breaks = c(0:10)) +
+    scale_x_continuous(breaks = c(0:10),limits = c(0,10)) +
+    labs(x = "Expected Quantiles", y = "Observed Quantiles") +
+    ggtitle("X-squared = 18141, df = 10, p-value < 2.2e-16")+
+  labs(tag = "E")
+
+# Observed frequencies
+observed <- table(factor(cell_data$MutL, levels = 0:max(cell_data$MutL)))
+
+# Expected frequencies
+expected <- dpois(0:max(cell_data$MutL), lambda) * length(cell_data$MutL)
+
+# Chi-squared test
+chisq_test <- chisq.test(observed, p = expected, rescale.p = T)
+
+
+##### Combine plots #####
+left <- (micro / C) + plot_layout(heights = c(1,3))
+
+right <- (B / D / E) + plot_layout(heights = c(1,1,1))
+
+
+
+#cairo_pdf("Figure 1.pdf", width = 7,height = 7)
+
+wrap_plots(left,right,widths = c(1.5,1)) &
+  theme(text = element_text(size = 7),strip.clip = "off",
+        plot.tag = element_text(size = 10,face = "bold"),
+        strip.background = element_rect(size = .25), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25), plot.title = element_text(size = 7))
+#dev.off()
+
+```
+
+\onehalfspacing
+
+**Figure 1. Visualization and quantification of replication forks and replication errors in mutH-deficient E. coli. A)** Representative microscopy images showing E. coli cells expressing mCherry-DnaN and CFP-MutL fluorescent foci tagging replication forks and replication errors, respectively. Scale bar is 1 µm. **B)** Frequency of E. coli cells with 0, 2, 6, or ≥ 7 replication forks per cell, obtained from 93,861 cells. **C)** Frequency of MutL foci per cell, in cells with 0, 2, 6, or ≥ 7 replication forks obtained from 93,861 cells. **D)** Frequency of MutL foci per cell, in 93,861 cells. The red line and dots indicate the predicted Poisson distribution. **E)** Q-Q plot of MutL foci per cell obtained from 93,861 cells. The red line indicates the expected distribution if the data have a Poisson distribution.
+
+\newpage
+
+```{r Figure 2, echo=FALSE, fig.height=3.5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
+
+# Import list of peaks for each replicate
+peaks_IP_mutH_rep1 <- read_excel("Data/Peaks_Final_2softwares.xlsx",sheet = 1) %>% mutate("Program" = "NC_000913.3")
+peaks_IP_mutH_rep2 <- read_excel("Data/Peaks_Final_2softwares.xlsx",sheet = 2) %>% mutate("Program" = "NC_000913.3")
+
+all_peaks_IP_mutH <- mergeRegions(toGRanges(as.data.frame(peaks_IP_mutH_rep1)),toGRanges(as.data.frame(peaks_IP_mutH_rep2)))
+all_peaks_IP_mutH <- toDataframe(all_peaks_IP_mutH)
+all_peaks_IP_mutH$Sample <- "Peaks"
+all_peaks_IP_mutH$name <- c(1:length(all_peaks_IP_mutH$chr))
+
+all_peaks_IP_mutH <- all_peaks_IP_mutH %>%
+  mutate("Size (bp)" = all_peaks_IP_mutH$end-all_peaks_IP_mutH$start+1) %>% dplyr::rename("Size" = "Size (bp)")
+
+# Save the final file with the peak regions
+#write.csv(all_peaks_IP_mutH,"combined_peaks.csv")
+
+# Import the fasta file of E. coli genome NC_000913.3
+genome_fasta <- readDNAStringSet("Data/NC_000913.3.fasta")
+names(genome_fasta) <- "NC_000913.3"
+
+# Import data from each software
+
+MACS3 <- read.table("Peak_Identification/MACS3/mutH_rep1_peaks.xls",header = T)
+MACS3 <- rbind(MACS3, read.table("Peak_Identification/MACS3/mutH_rep2_peaks.xls",header = T))
+MACS3 <- filter(MACS3, end-start < 15000)
+
+MOSAICS <- read.table("Peak_Identification/MOSAICS/filtered_peak_mutH_Rep1.txt",header = T)
+MOSAICS <- rbind(MOSAICS, read.table("Peak_Identification/MOSAICS/filtered_peak_mutH_Rep2.txt",header = T))
+MOSAICS <- filter(MOSAICS, peakStop-peakStart < 15000)
+
+epic2 <- read.table("Peak_Identification/epic2/epic2_mutH_peaks_rep1.csv",header = T,sep = ",")
+epic2 <- rbind(epic2,read.table("Peak_Identification/epic2/epic2_mutH_peaks_rep2.csv",header = T,sep = ","))
+epic2 <- filter(epic2, End-Start < 15000)
+
+# Import the bigwig file from each sample
+
+IP_Rep1_200bp <- LoadTrackFile(track.file = "IP1_SES_200bin.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep1_200bp$Sample <- "IP-Rep1"
+
+IP_Rep2_200bp <- LoadTrackFile(track.file = "IP2_SES_200bin.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep2_200bp$Sample <- "IP-Rep2"
+
+# Do circular plot
+
+label <- data.frame(seqnames = c("NC_000913.3"),start = c(3925804,1590777),end = c(3925804,1590777), label = c("ori","dif"))
+
+brk <- c(0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5)*10^6
+
+{
+
+#CairoPDF("Figure_2.pdf",width = 7,height = 3.5)
+par(mfrow = c(1,2))
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+{
+circos.clear()
+
+
+circos.par(start.degree = 34.47, track.height = .1,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = .25)
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightblue", bg.lwd = .25)
+circos.genomicRect(as.data.frame(MACS3),ytop = 1,ybottom = 0,col = "blue",border = NA)
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightpink", bg.lwd = .25)
+circos.genomicRect(as.data.frame(MOSAICS),ytop = 1,ybottom = 0,col = "darkred",border = NA)
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightgreen", bg.lwd = .25)
+circos.genomicRect(as.data.frame(epic2),ytop = 1,ybottom = 0,col = "darkgreen",border = NA)
+circos.track(ylim = c(-1,7), bg.border = "black", bg.col = "white", bg.lwd = .25)
+circos.genomicLines(region = IP_Rep2_200bp,
+                    value = IP_Rep2_200bp$score, 
+                    type = "l",lwd = .25, col = "darkred")
+circos.genomicLines(region = IP_Rep1_200bp,
+                    value = IP_Rep1_200bp$score, 
+                    type = "l",lwd = .25, col = "darkorange")
+
+
+text(0,0,c(expression(paste(italic("Escherichia coli \n"))),
+           expression(paste("K-12 MG1655 ",Δ,italic("mutH")))),cex = .6)
+text(-1,1,substitute(paste(bold("A"))),cex = 0.83)
+text(1,1,substitute(paste(bold("B"))),cex = 0.83)
+
+circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+#dev.off()
+
+{
+  #CairoPDF(file = "test.pdf",width = 3.5,height = 3.5)
+  circos.clear()
+  circos.par(start.degree = 34.47, track.height = .1,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001), canvas.xlim = c(0,1), canvas.ylim = c(0,1))
+  
+  circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+  
+  circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = .25)
+
+  circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = 0)
+
+  
+  circos.genomicRect(filter(all_peaks_IP_mutH, end < 500000 | end > 3800000),ytop = 1,ybottom = 0,col = "black",border = NA)
+  circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightblue", bg.lwd = .25)
+  circos.genomicRect(filter(MACS3, end < 500000 | end > 3800000),ytop = 1,ybottom = 0,col = "blue",border = NA)
+  circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightpink", bg.lwd = .25)
+  circos.genomicRect(filter(MOSAICS, peakStop < 500000 | peakStop > 3800000),ytop = 1,ybottom = 0,col = "darkred",border = NA)
+  circos.track(ylim = c(0,1), bg.border = "black", bg.col = "lightgreen", bg.lwd = .25)
+  circos.genomicRect(filter(epic2, End < 500000 | End > 3800000),ytop = 1,ybottom = 0,col = "darkgreen",border = NA)
+  circos.track(ylim = c(-1,7), bg.border = "black", bg.col = "white", bg.lwd = .25)
+  circos.genomicLines(region = filter(IP_Rep2_200bp, end < 500000 | end > 3800000),
+                    value = filter(IP_Rep2_200bp, end < 500000 | end > 3800000)$score, 
+                    type = "l",lwd = .25, col = "darkred")
+  circos.genomicLines(region = filter(IP_Rep1_200bp, end < 500000 | end > 3800000),
+                    value = filter(IP_Rep1_200bp, end < 500000 | end > 3800000)$score, 
+                    type = "l",lwd = .25, col = "darkorange")
+  
+ 
+  
+  legend(x = .8,y = 1.,,lty = 1,seg.len = -.5,box.lwd = .25, x.intersp = 1, cex = .6,
+       legend = c("Combined","MACS3","MOSAICS","epic2"),bty = "n",border = NA,
+       title = "MutL-AR",
+       col = c("black","blue","darkred","darkgreen"), 
+       fill = c("lightgrey","lightblue","lightpink","lightgreen"))
+  legend(x = .4,y = 1,lty = 1,seg.len = -.5, box.lwd = .25, x.intersp = 1, cex = .6,
+       legend = c("IP-1","IP-2"),title = "Log2 ratio (IP/Input)",bty = "n",border = NA,
+       col = c("darkorange","darkred"),fill = c("white","white"))
+  
+  circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+  
+}
+
+#dev.off()
+}
+
+
+
+## Prepare representative examples of the mismatch repair models ##
+
+IP_Rep1_1bp <- LoadTrackFile(track.file = "Data/IP1_SES_1bp.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep1_1bp$Sample <- "IP-1"
+
+IP_Rep2_1bp <- LoadTrackFile(track.file = "Data/IP2_SES_1bp.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep2_1bp$Sample <- "IP-2"
+
+## Plot ##
+
+low <- 3981200
+high <- 3984000
+
+D <- ggplot(mapping = aes(color = Sample))+
+  geom_step(data = filter(IP_Rep1_1bp, start > low-1 & end < high+1), 
+            aes(x = start, y = score), size = .25)+
+  geom_step(data = filter(IP_Rep2_1bp, start > low-1 & end < high+1),
+            aes(x = start, y = score), size = .25)+
+  scale_x_continuous(name = "Genome position",
+                     limits = c(low,high), 
+                     breaks = pretty(c(low,high),n = 3))+
+  scale_y_continuous(name = "Log2 ratio (IP/Input)")+
+  scale_color_manual(values = c("darkorange","darkred"))+
+  theme_pubr()+
+  theme(text = element_text(size = 7),legend.position = "none",
+        axis.line = element_line(size = .25), 
+        axis.ticks = element_line(size = .25), 
+        plot.title = element_text(size = 7))
+
+
+low <- 2947000
+high <- 2948200
+
+E <- ggplot(mapping = aes(color = Sample))+
+  geom_step(data = filter(IP_Rep1_1bp, start > low-1 & end < high+1), 
+            aes(x = start, y = score), size = .25)+
+  geom_step(data = filter(IP_Rep2_1bp, start > low-1 & end < high+1),
+            aes(x = start, y = score), size = .25)+
+  scale_x_continuous(name = "Genome position",
+                     limits = c(low,high), 
+                     breaks = pretty(c(low,high),n = 3))+
+  scale_y_continuous(name = "Log2 ratio (IP/Input)")+
+  scale_color_manual(values = c("darkorange","darkred"))+
+  theme_pubr()+
+  theme(text = element_text(size = 7),legend.position = "none",
+        axis.line = element_line(size = .25), 
+        axis.ticks = element_line(size = .25), 
+        plot.title = element_text(size = 7))
+
+low <- 3941000
+high <- 3947700
+
+f <- ggplot(mapping = aes(color = Sample))+
+  geom_step(data = filter(IP_Rep1_1bp, start > low-1 & end < high+1), 
+            aes(x = start, y = score), size = .25)+
+  geom_step(data = filter(IP_Rep2_1bp, start > low-1 & end < high+1),
+            aes(x = start, y = score), size = .25)+
+  scale_x_continuous(name = "Genome position",
+                     limits = c(low,high), 
+                     breaks = pretty(c(low,high),n = 3))+
+  scale_y_continuous(name = "Log2 ratio (IP/Input)")+
+  scale_color_manual(values = c("darkorange","darkred"))+
+  theme_pubr()+
+  theme(text = element_text(size = 7),legend.position = "none",
+        axis.line = element_line(size = .25), 
+        axis.ticks = element_line(size = .25), 
+        plot.title = element_text(size = 7))
+
+#cairo_pdf("MutL-AR_models.pdf", width = 7,height = 2)
+
+wrap_plots(D,E,f)
+
+#dev.off()
+
+```
+
+\onehalfspacing
+
+**Figure 2.** **Localization and patterns of the MutL- AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of MutL-AR and the Log2 ratio (IP/Input) after scaling with SES. The order of the rings (from outside to inside) is: Combined (MutL-AR predicted by at least two software), MutL-AR predicted by MACS3, MutL-AR predicted by MOSAICS, MutL-AR predicted by epic2, and the Log2 ratio (IP/Input) after scaling with SES for two independent experiments. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). **C)** Schematics (top) representing the distribution of MutlS-MutL clamps in the event of mismatch and (bottom) MutL-AR showing similar patterns.
+
+\newpage
+
+```{r Figure 3, echo=FALSE, fig.height=3.5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
+
+# ori is at 3925804 bp or 3925.804 Kb. According to Espeli,O., Mercier,R. and Boccard,F. (2008) DNA dynamics vary according to macrodomain topography in the E. coli chromosome. Molecular Microbiology, 68, 1418–1427, the location of the macrodomains is the following (position is ori was 0 in Kb): ORI - 4455 to 715, NSR - 715 to 1315, Right = 1315 to 1854, TER - 1854 to 2715, Left - 2715 to 3518, NSL - 3518 to 4455
+mac <- data.frame(chr = "NC_000913.3",
+                start = c(0,
+                          3925804+1315000-4641652+1,
+                          3925804+1854000-4641652+1,
+                          3925804+2715000-4641652+1,
+                          3925804+3518000-4641652+1,
+                          3739152+1),
+                end = c(3925804+1315000-4641652,
+                        3925804+1854000-4641652,
+                        3925804+2715000-4641652,
+                        3925804+3518000-4641652,
+                        3925804+4455000-4641652,
+                        4641652-1),
+                Macrodomain = c("NSR","Right","TER","Left","NSL","ORI"))
+
+mean <- data.frame()
+for (a in 1:6) {
+  mean1 <- mean(c(mac$start[a],mac$end[a]))
+  mean <- rbind(mean,mean1)
+  
+}
+
+
+labels <- data.frame(chr = "NC_000913.3",
+                start = mean,
+                end = mean,
+                Macrodomain = c("NSR","Right","TER","Left","NSL","ORI"))
+colnames(labels) <- c("chr","start","end","Macrodomain")
+
+### Import HupA data from Decker,K.T., Gao,Y., Rychel,K., Al Bulushi,T., Chauhan,S.M., Kim,D., Cho,B.-K. and Palsson,B.O. (2022) proChIPdb: a chromatin immunoprecipitation database for prokaryotic organisms. Nucleic Acids Research, 50, D1077–D1084 ###
+
+hupa_regions <- read.csv("Data/HupA_binding_site_table.csv")
+hupa_regions <- hupa_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+hupa_ranges <- toGRanges(hupa_regions)
+hupA <- as.data.frame(commonRegions(hupa_regions,all_peaks_IP_mutH))
+
+hupA_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(hupA, end > location_start & end < location_end),
+                          filter(hupA, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  hupA_peaks <- rbind(hupA_peaks,temp) 
+  
+}
+
+### Import HupB data from Decker,K.T., Gao,Y., Rychel,K., Al Bulushi,T., Chauhan,S.M., Kim,D., Cho,B.-K. and Palsson,B.O. (2022) proChIPdb: a chromatin immunoprecipitation database for prokaryotic organisms. Nucleic Acids Research, 50, D1077–D1084 ###
+
+hupb_regions <- read.csv("Data/HupB_binding_site_table.csv")
+hupb_regions <- hupb_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+hupb_ranges <- toGRanges(hupb_regions)
+hupB <- as.data.frame(commonRegions(hupb_regions,all_peaks_IP_mutH))
+
+hupB_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(hupB, end > location_start & end < location_end),
+                          filter(hupB, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  hupB_peaks <- rbind(hupB_peaks,temp) 
+  
+}
+
+### Import Fis data from Decker,K.T., Gao,Y., Rychel,K., Al Bulushi,T., Chauhan,S.M., Kim,D., Cho,B.-K. and Palsson,B.O. (2022) proChIPdb: a chromatin immunoprecipitation database for prokaryotic organisms. Nucleic Acids Research, 50, D1077–D1084 ###
+
+fis_regions <- read.csv("Data/Fis_binding_site_table.csv")
+fis_regions <- fis_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+fis_ranges <- toGRanges(fis_regions)
+fis <- as.data.frame(commonRegions(fis_regions,all_peaks_IP_mutH))
+
+fis_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(fis, end > location_start & end < location_end),
+                          filter(fis, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  fis_peaks <- rbind(fis_peaks,temp) 
+  
+}
+
+### Import H-NS data from Decker,K.T., Gao,Y., Rychel,K., Al Bulushi,T., Chauhan,S.M., Kim,D., Cho,B.-K. and Palsson,B.O. (2022) proChIPdb: a chromatin immunoprecipitation database for prokaryotic organisms. Nucleic Acids Research, 50, D1077–D1084 ###
+
+hns_regions <- read.csv("Data/H-NS_binding_site_table.csv")
+hns_regions <- hns_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+hns_ranges <- toGRanges(hns_regions)
+hns <- as.data.frame(commonRegions(hns_regions,all_peaks_IP_mutH))
+
+hns_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(hns, end > location_start & end < location_end),
+                          filter(hns, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  hns_peaks <- rbind(hns_peaks,temp) 
+  
+}
+
+### Import GapR data from Guo,M.S., Kawamura,R., Littlehale,M.L., Marko,J.F. and Laub,M.T. (2021) High-resolution, genome-wide mapping of positive supercoiling in chromosomes. eLife, 10, e67236 ###
+
+gapR_regions <- read.csv("Data/GapR_binding_site_table.csv")
+gapR_regions <- gapR_regions %>% mutate(seqnames = "NC_000913.3") %>% dplyr::select(seqnames, start, end) 
+
+
+#there is an error in the file, we have to remove one row
+gapR_regions <- gapR_regions %>% filter(!row_number() %in% 158)
+gapR_ranges <- toGRanges(gapR_regions)
+gapR <- as.data.frame(commonRegions(gapR_regions,all_peaks_IP_mutH))
+
+gapR_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(gapR, end > location_start & end < location_end),
+                          filter(gapR, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  gapR_peaks <- rbind(gapR_peaks,temp) 
+  
+}
+
+### Do circular plot ###
+
+{
+#CairoPDF(file = "Figure_3.pdf",width = 7,height = 3.5)
+par(mfrow = c(1,2))
+par(lwd = .25)
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+
+{
+circos.clear()
+
+circos.par(start.degree = 34.47, track.height = .05,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), track.height = .1,bg.border = NA, bg.col = "white")
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+
+circos.genomicRect(subset(mac, Macrodomain == "ORI"),ytop = 1,ybottom = 0,col = "darkgreen",border = "black",border.lwd = .25)
+circos.genomicLines(region = subset(mac, Macrodomain == "NSR"),value = .5, type = "segment",col = "darkorange",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "Right"),ytop = 1,ybottom = 0,col = "darkorange",border = "black",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "TER"),ytop = 1,ybottom = 0,col = "lightblue",border = "black",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "Left"),ytop = 1,ybottom = 0,col = "darkblue",border = "black",lwd = .25)
+circos.genomicLines(region = subset(mac, Macrodomain == "NSL"),value = .5, type = "segment",col = "darkblue",lwd = .25)
+circos.text(x = labels$start, y = c(.18,.5,.5,.5,.18,.5),
+            col = c("black","black","black","white","black","white"),
+            labels = labels$Macrodomain,niceFacing = T,cex = .6)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(hupa_regions,ytop = .98,ybottom = 0.02,col = "#67001f",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(hupb_regions,ytop = .98,ybottom = 0.02,col = "#980043",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(fis_regions,ytop = .98,ybottom = 0.02,col = "#ce1256",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(hns_regions,ytop = .98,ybottom = 0.02,col = "#e7298a",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(gapR_regions,ytop = .98,ybottom = 0.02,col = "#df65b0",border = NA)
+
+text(0,0,c(expression(paste(italic("Escherichia coli \n"))),
+           expression(paste("K-12 MG1655 ",Δ,italic("mutH")))),cex = .6)
+
+text(-1,1,substitute(paste(bold("A"))),cex = 0.83)
+text(1,1,substitute(paste(bold("B"))),cex = 0.83)
+
+circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+{
+  #CairoPDF(file = "test.pdf",width = 3.5,height = 3.5)
+  circos.clear()
+  circos.par(start.degree = 34.47, track.height = .1,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001), canvas.xlim = c(0,1), canvas.ylim = c(0,1))
+  
+  circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), track.height = .1,bg.border = NA, bg.col = "white")
+
+  circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+
+circos.genomicRect(subset(mac, Macrodomain == "ORI"),ytop = 1,ybottom = 0,col = "darkgreen",border = "black",border.lwd = .25)
+circos.genomicLines(region = subset(mac, Macrodomain == "NSR"),value = .5, type = "segment",col = "darkorange",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "Right"),ytop = 1,ybottom = 0,col = "darkorange",border = "black",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "TER"),ytop = 1,ybottom = 0,col = "lightblue",border = "black",lwd = .25)
+circos.genomicRect(subset(mac, Macrodomain == "Left"),ytop = 1,ybottom = 0,col = "darkblue",border = "black",lwd = .25)
+circos.genomicLines(region = subset(mac, Macrodomain == "NSL"),value = .5, type = "segment",col = "darkblue",lwd = .25)
+circos.text(x = labels$start, y = c(.18,.5,.5,.5,.18,.5),
+            col = c("black","black","black","white","black","white"),
+            labels = labels$Macrodomain,niceFacing = T,cex = .6)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+circos.genomicRect(filter(all_peaks_IP_mutH, end < 500000 | end > 3800000),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(filter(hupa_regions,end < 500000 | end > 3800000),ytop = .98,ybottom = 0.02,col = "#67001f",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(filter(hupb_regions,end < 500000 | end > 3800000),ytop = .98,ybottom = 0.02,col = "#980043",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(filter(fis_regions,end < 500000 | end > 3800000),ytop = .98,ybottom = 0.02,col = "#ce1256",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(filter(hns_regions,end < 500000 | end > 3800000),ytop = .98,ybottom = 0.02,col = "#e7298a",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(filter(gapR_regions,end < 500000 | end > 3800000),ytop = .98,ybottom = 0.02,col = "#df65b0",border = NA)
+
+  
+legend(x = .8,y = 1.,lty = 1,seg.len = -.5,box.lwd = .25, x.intersp = 1, cex = .6,lwd = 1,
+       legend = c("MutL-AR","HupA","HupB","Fis","H-NS","GapR"),bty = "n",border = NA,
+       col = c("black","#67001f","#980043","#ce1256","#e7298a","#df65b0"), 
+       fill = c("lightgrey","white","white","white","white","white"))
+
+  circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                       labels_height = 0.01, connection_height = .03,line_lwd = .25)
+}
+
+#dev.off()
+}
+```
+
+\onehalfspacing
+
+**Figure 3.** **Global chromosome structure and nucleoid-associated proteins binding sites in the MutL-AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of MutL-AR, the Macrodomains and nucleoid-associated proteins binding sites. The order of the rings (from outside to inside) is: macrodomains, MutL-AR, HupA, HupB, Fis, H-NS, and GapR binding sites. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). NSL, non-structured left. NSR, non-structured right.
+
+\newpage
+
+```{r Figure 4, echo=FALSE, fig.height=3.5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
+
+### Calculate GC content for each 200 bp bin ###
+
+interval_size <- 200
+bins_gc <- data.frame(
+  seqnames = "NC_000913.3",
+  start = seq(0, 4641652, by = interval_size) + 1,
+  end = seq(interval_size, 4641652 + interval_size, by = interval_size)
+)
+
+bins_gc$end[bins_gc$end == 4641800] <- 4641652
+bins_gc <- toGRanges(bins_gc)
+
+genome_bins <- genome_fasta[bins_gc]
+gc <- letterFrequency(genome_bins, "GC", as.prob = TRUE)
+bins_gc$score <- gc
+gc_content <- as.data.frame(bins_gc) %>% dplyr::select(seqnames,start,end,"G.C")
+
+peaks_gc <- genome_fasta[toGRanges(all_peaks_IP_mutH)]
+peaks_gc <- letterFrequency(peaks_gc, "GC", as.prob = TRUE)
+
+### Calculate melting temperature per 200 bp bin ###
+
+Tm <- data.frame()
+for (n in 1:length(genome_bins)) {
+ 
+  Tmtemp <- Tm_NN(ntseq = as.character(genome_bins[[n]]), nn_table = "DNA_NN1", Na = 50)
+  Tm <- rbind(Tm, Tmtemp[[1]])
+}
+
+names(Tm) <- "Tm"
+Tm <- cbind(gc_content,Tm) %>% select(seqnames,start,end,Tm)
+
+peaks_gc <- genome_fasta[toGRanges(all_peaks_IP_mutH)]
+Tm_peaks <- data.frame()
+for (n in 1:length(peaks_gc)) {
+ 
+  Tmtemp <- Tm_NN(ntseq = as.character(peaks_gc[[n]]), nn_table = "DNA_NN1", Na = 50)
+  Tm_peaks <- rbind(Tm_peaks, Tmtemp[[1]])
+}
+
+
+# Select Tm bins within the peak regions
+peak_Tm_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_Tm_mutH <- rbind(peak_Tm_mutH,filter(Tm, end > location_start & end < location_end),
+                          filter(Tm, start > location_start & start < location_end)) %>% 
+    unique()
+  
+}
+
+
+peak_Tm_mutH$Type <- "MutL-AR"
+Tm_values$Type <- "Genome"
+
+Tm_total <- rbind(Tm_values,peak_Tm_mutH)
+
+### Identify microsatellites ###
+
+repetitive_bases <- data.frame()
+
+for (x in c("A","T","C","G")) {
+  for (number in 0:6) {
+    string <- paste0(strrep(x,4),strrep(x,number))
+    temp <- vmatchPattern(string,genome_fasta,max.mismatch = 0, min.mismatch = 0,fixed = T)
+    temp <- data.frame(temp) %>% mutate(Sample = x, seqnames = "NC_000913.3") %>% dplyr::select(seqnames, start, end, Sample)
+    repetitive_bases <- rbind(repetitive_bases,temp) 
+  }
+}
+
+repetitive_bases <- repetitive_bases %>% group_by(start) %>% slice_max(end)
+repetitive_bases <- repetitive_bases %>% group_by(end,Sample) %>% slice_min(start)
+repetitive_bases <- as.data.frame(repetitive_bases) %>% mutate(Sample = strrep(Sample,(end-start+1)))
+
+repetitive_bases_ranges <- toGRanges(repetitive_bases)
+
+rep_bases <- as.data.frame(commonRegions(repetitive_bases_ranges,all_peaks_IP_mutH))
+
+rep_bases_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(rep_bases, end > location_start & end < location_end),
+                          filter(rep_bases, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  rep_bases_peaks <- rbind(rep_bases_peaks,temp) 
+  
+}
+
+interval_size <- 1000
+bins_rep <- data.frame(
+  start = seq(0, 4641652, by = interval_size) + 1,
+  end = seq(interval_size, 4641652 + interval_size, by = interval_size)
+)
+
+bins_rep$end[bins_rep$end == 4642000] <- 4641652
+
+count_overlaps <- function(bin_start, bin_end, seq_data) {
+  sum(seq_data$start <= bin_end & seq_data$end >= bin_start)
+}
+
+bins_rep$count <- mapply(count_overlaps, bins_rep$start, bins_rep$end, MoreArgs = list(seq_data = repetitive_bases))
+
+
+### Import cruciform regions from CIRI output Miura,O., Ogake,T. and Ohyama,T. (2018) Requirement or exclusion of inverted repeat sequences with cruciform-forming potential in Escherichia coli revealed by genome-wide analyses. Curr Genet, 64, 945–958 ###
+
+cruciform <- read.delim("Data/cruciform_NC_000913.3.txt") %>% 
+  mutate(seqnames = "NC_000913.3") %>%
+  dplyr::select(seqnames,start,end)
+
+cruci <- as.data.frame(commonRegions(toGRanges(cruciform),all_peaks_IP_mutH))
+
+cruciform_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(cruci, end > location_start & end < location_end),
+                          filter(cruci, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  cruciform_peaks <- rbind(cruciform_peaks,temp) 
+  
+}
+interval_size <- 1000
+bins_cru <- data.frame(
+  start = seq(0, 4641652, by = interval_size) + 1,
+  end = seq(interval_size, 4641652 + interval_size, by = interval_size)
+)
+
+bins_cru$end[bins_cru$end == 4642000] <- 4641652
+
+bins_cru$count <- mapply(count_overlaps, bins_cru$start, bins_cru$end, MoreArgs = list(seq_data = cruciform))
+
+### Import ssDNA data from Pham,P., Shao,Y., Cox,M.M. and Goodman,M.F. (2022) Genomic landscape of single-stranded DNA gapped intermediates in Escherichia coli. Nucleic Acids Research, 50, 937–951 ###
+
+ssdna_w <- read_excel("Data/ssDNA.xlsx",sheet = 1,col_names = T,skip = 2)
+ssdna_w <- as.data.frame(ssdna_w) %>% 
+  tidyr::separate('Genome positions',into = c("start","end")) %>% 
+  mutate(seqnames = "NC_000913.3") %>% 
+  dplyr::select(seqnames,start,end,`Cells (strand)`, Region)
+ssdna_w$start <- as.numeric(ssdna_w$start)
+ssdna_w$end <- as.numeric(ssdna_w$end)
+
+ssdna_c <- read_excel("Data/ssDNA.xlsx",sheet = 2,col_names = T,skip = 2)
+ssdna_c <- as.data.frame(ssdna_c) %>% 
+  tidyr::separate('Genome positions',into = c("start","end")) %>% 
+  mutate(seqnames = "NC_000913.3") %>% 
+  dplyr::select(seqnames,start,end,`Cells (strand)`, Region)
+ssdna_c$start <- as.numeric(ssdna_c$start)
+ssdna_c$end <- as.numeric(ssdna_c$end)
+
+ssdna <- rbind(ssdna_w,ssdna_c)
+ssdna <- filter(ssdna, Region == "High Coverage")
+
+ssDNA <- as.data.frame(commonRegions(toGRanges(ssdna),all_peaks_IP_mutH))
+
+ssDNA_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(ssDNA, end > location_start & end < location_end),
+                          filter(ssDNA, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  ssDNA_peaks <- rbind(ssDNA_peaks,temp) 
+  
+}
+
+
+### Identify GATC sites in the genome ###
+GATC_regions <- vmatchPattern("GATC",genome_fasta,fixed = T,max.mismatch = 0,min.mismatch = 0) 
+GATC_regions <- data.frame(GATC_regions) %>% mutate(Sample = "GATC", seqnames = "NC_000913.3") %>% dplyr::select(seqnames, start, end, Sample)
+GATC_regions$start <- as.numeric(GATC_regions$start)
+GATC_regions$end <- as.numeric(GATC_regions$end)
+
+GATC <- as.data.frame(commonRegions(toGRanges(GATC_regions),all_peaks_IP_mutH))
+
+GATC_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(GATC, end > location_start & end < location_end),
+                          filter(GATC, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  GATC_peaks <- rbind(GATC_peaks,temp) 
+  
+}
+
+interval_size <- 1000
+bins_gatc <- data.frame(
+  start = seq(0, 4641652, by = interval_size) + 1,
+  end = seq(interval_size, 4641652 + interval_size, by = interval_size)
+)
+
+bins_gatc$end[bins_gatc$end == 4642000] <- 4641652
+
+bins_gatc$count <- mapply(count_overlaps, bins_gatc$start, bins_gatc$end, MoreArgs = list(seq_data = GATC_regions))
+
+
+{
+#CairoPDF(file = "Figure_4.pdf",width = 7,height = 3.5)
+par(mfrow = c(1,2))
+par(lwd = .25)
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+{
+  #CairoPDF(file = "test.pdf",width = 7,height = 3.5)
+  
+circos.clear()
+
+circos.par(start.degree = 34.47, track.height = .05,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = gc_content, ytop = gc_content$G.C,
+                    value = gc_content$G.C, ybottom = gc_content$G.C,
+                    type = "l",lwd = .25, col = "#67000d",border = NA)
+
+circos.track(ylim = c(70,120), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = Tm, ytop = Tm$Tm,
+                    value = Tm$Tm, ybottom = Tm$Tm,
+                    type = "l",lwd = .25, col = "#a50f15",border = NA)
+
+circos.track(ylim = c(-1,35), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_rep, ytop = bins_rep$count,
+                    value = bins_rep$count, ybottom = bins_rep$count,
+                    type = "l",lwd = .25, col = "#cb181d",border = NA)
+
+circos.track(ylim = c(-1,20),  bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_cru, ytop = bins_cru$count,
+                    value = bins_cru$count, ybottom = bins_cru$count,
+                    type = "l",lwd = .25, col = "#ef3b2c",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(ssdna,ytop = .98,ybottom = 0.02,col = "#fb6a4a",border = NA)
+
+circos.track(ylim = c(-1,23),  bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_gatc, ytop = bins_gatc$count,
+                    value = bins_gatc$count, ybottom = bins_gatc$count,
+                    type = "l",lwd = .25, col = "#fc9272",border = NA)
+
+text(0,0,c(expression(paste(italic("Escherichia coli \n"))),
+           expression(paste("K-12 MG1655 ",Δ,italic("mutH")))),cex = .6)
+
+text(-1,1,substitute(paste(bold("A"))),cex = 0.83)
+text(1,1,substitute(paste(bold("B"))),cex = 0.83)
+
+circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+{
+circos.clear()
+
+circos.par(start.degree = 34.47, track.height = .1,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001), canvas.xlim = c(0,1), canvas.ylim = c(0,1))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = gc_content, ytop = gc_content$G.C,
+                    value = gc_content$G.C, ybottom = gc_content$G.C,
+                    type = "l",lwd = .25, col = "#67000d",border = NA)
+
+circos.track(ylim = c(70,120), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = Tm, ytop = Tm$Tm,
+                    value = Tm$Tm, ybottom = Tm$Tm,
+                    type = "l",lwd = .25, col = "#a50f15",border = NA)
+
+circos.track(ylim = c(-1,35), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_rep, ytop = bins_rep$count,
+                    value = bins_rep$count, ybottom = bins_rep$count,
+                    type = "l",lwd = .25, col = "#cb181d",border = NA)
+
+circos.track(ylim = c(-1,20),  bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_cru, ytop = bins_cru$count,
+                    value = bins_cru$count, ybottom = bins_cru$count,
+                    type = "l",lwd = .25, col = "#ef3b2c",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(ssdna,ytop = .98,ybottom = 0.02,col = "#fb6a4a",border = NA)
+
+circos.track(ylim = c(-1,23),  bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicLines(region = bins_gatc, ytop = bins_gatc$count,
+                    value = bins_gatc$count, ybottom = bins_gatc$count,
+                    type = "l",lwd = .25, col = "#fc9272",border = NA)
+
+legend(x = .75,y = 1.,lty = 1,seg.len = -.5,box.lwd = .25, x.intersp = 1, cex = .6,lwd = 1,
+       legend = c("MutL-AR","GC content","Melting temp.","Microsatellites","Cruciforms","ssDNA","GATC sites"),bty = "n",border = NA,
+       col = c("black","#67000d","#a50f15","#cb181d","#ef3b2c","#fb6a4a","#fc9272"), 
+       fill = c("lightgrey","white","white","white","white","white","white"))
+
+circos.genomicLabels(bed = label[1,],labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+#dev.off()
+
+}
+
+```
+
+\onehalfspacing
+
+**Figure 4.** **Local DNA sequence properties of the MutL-AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-AR, GC content per 200 bp (ranging from 0 to 1), melting temperature per 200 bp (ranging from 70 to 120), number of microsatellites (mononucleotide repeats of 4 nucleotides or more) per 1000 bp (ranging from 0 to 35), number of cruciform-prone sequences per 1000 bp (ranging from 0 to 20), ssDNA location, and number of GATC sites per 1000 bp (ranging from 0 to 23. The numbers located on the outermost indicate genome coordinates in megabase pairs (Mbs).
+
+```{r Figure 5, echo=FALSE, fig.height=3.5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
+
+# Import RNA-Seq data from Niccum,B.A., Lee,H., MohammedIsmail,W., Tang,H. and Foster,P.L. (2019) The Symmetrical Wave Pattern of Base-Pair Substitution Rates across the Escherichia coli Chromosome Has Multiple Causes. mBio, 10, e01226-19 #
+rnaseq_data <- read_excel("Data/RNA-seq.xlsx",skip = 4)
+rnaseq_data <- rnaseq_data %>% dplyr::rename(Gene = ...1,Transcription = 'log phase',Replichore = ...8, Direction = ...9) %>% 
+  dplyr::select(Gene,Start,End,Nt,Transcription,Replichore,Direction) %>% na.omit()
+rnaseq_data$Transcription <- as.numeric(rnaseq_data$Transcription)
+rnaseq_data$Sample <- "RNAseq"
+
+# Select RNA-Seq from genes within the peak regions
+peak_rna_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_rna_mutH <- rbind(peak_rna_mutH,filter(rnaseq_data, End > location_start & End < location_end),
+                          filter(rnaseq_data, Start > location_start & Start < location_end)) %>% 
+    unique()
+  
+}
+
+
+peak_rna_mutH$Type <- "MutL-AR"
+rnaseq_data$Type <- "Genome"
+
+# Remove ribosomal genes from the RNA-seq data as they are depleted
+peak_rna_mutH_original <- peak_rna_mutH
+peak_rna_mutH <- peak_rna_mutH %>% subset(Gene != "rrlA" & Gene != "rrlB" & Gene != "rrlC" & Gene != "rrlD" & Gene != "rrlE" & Gene != "rrlG" & Gene != "rrlH" & 
+                                        Gene != "rrfA" & Gene != "rrfB" & Gene != "rrfC" & Gene != "rrfD" & Gene != "rrfE" & Gene != "rrfG" & Gene != "rrfH" &
+                                        Gene != "rrsA" & Gene != "rrsB" & Gene != "rrsC" & Gene != "rrsD" & Gene != "rrsE" & Gene != "rrsG" & Gene != "rrsH")
+
+rnaseq_data_original <- rnaseq_data
+rnaseq_data <- rnaseq_data %>% subset(Gene != "rrlA" & Gene != "rrlB" & Gene != "rrlC" & Gene != "rrlD" & Gene != "rrlE" & Gene != "rrlG" & Gene != "rrlH" & 
+                                                Gene != "rrfA" & Gene != "rrfB" & Gene != "rrfC" & Gene != "rrfD" & Gene != "rrfE" & Gene != "rrfG" & Gene != "rrfH" &
+                                                Gene != "rrsA" & Gene != "rrsB" & Gene != "rrsC" & Gene != "rrsD" & Gene != "rrsE" & Gene != "rrsG" & Gene != "rrsH")
+
+
+
+# Import data from RNA polymerase
+rpob_regions <- read.csv("Data/RpoB_binding_site_table.csv")
+rpob_regions <- rpob_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+
+RpoB <- as.data.frame(commonRegions(rpob_regions,all_peaks_IP_mutH))
+
+RpoB_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(RpoB, end > location_start & end < location_end),
+                          filter(RpoB, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  RpoB_peaks <- rbind(RpoB_peaks,temp) 
+  
+}
+
+# Import data from GyrA
+gyra_regions <- read.csv("Data/GyrA_binding_site_table.csv")
+gyra_regions <- gyra_regions %>% mutate(seqnames = "NC_000913.3", start = Start.Position, end = End.Position) %>% dplyr::select(seqnames, start, end) 
+
+GyrA <- as.data.frame(commonRegions(gyra_regions,all_peaks_IP_mutH))
+
+GyrA_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(GyrA, end > location_start & end < location_end),
+                          filter(GyrA, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  GyrA_peaks <- rbind(GyrA_peaks,temp) 
+  
+}
+
+# Import data from Kaplan,O.I., Berber,B., Hekim,N. and Doluca,O. (2016) G-quadruplex prediction in E. coli genome reveals a conserved putative G-quadruplex-Hairpin-Duplex switch. Nucleic Acids Res, 10.1093/nar/gkw769 #
+g_quad_kaplan <- read.csv("Data/G4Kaplan.csv",sep = ";",header = T,skip = 1)
+g_quad_kaplan <- data.frame(seqnames = "NC_000913.3", start = g_quad_kaplan$no, end = g_quad_kaplan$no+nchar(g_quad_kaplan$Sequence)-1)
+
+G4Kap <- as.data.frame(commonRegions(g_quad_kaplan,all_peaks_IP_mutH))
+
+G4Kap_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(G4Kap, end > location_start & end < location_end),
+                          filter(G4Kap, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  G4Kap_peaks <- rbind(G4Kap_peaks,temp) 
+  
+}
+
+# Import data from G4Hunter Brázda,V., Kolomazník,J., Lýsek,J., Bartas,M., Fojta,M., Šťastný,J. and Mergny,J.-L. (2019) G4Hunter web application: a web server for G-quadruplex prediction. Bioinformatics, 35, 3493–3495 #
+
+g_quad_hunter <- read.csv("Data/G4Hunter.csv",sep = "")
+g_quad_hunter <- data.frame(seqnames = "NC_000913.3", start = g_quad_hunter$POSITION, end = g_quad_hunter$POSITION+g_quad_hunter$LENGTH-1)
+
+G4Hunter <- as.data.frame(commonRegions(g_quad_hunter,all_peaks_IP_mutH))
+
+G4Hunter_peaks <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(G4Hunter, end > location_start & end < location_end),
+                          filter(G4Hunter, start > location_start & start < location_end)) %>% 
+    mutate(Region = peak_region) %>% unique()
+  
+  temp <- temp %>% group_by(Region) %>% mutate(Number = n(), Size = sum(width)) %>% 
+    select(Region, Number,Size) %>% unique()
+  
+  G4Hunter_peaks <- rbind(G4Hunter_peaks,temp) 
+  
+}
+
+
+{
+#CairoPDF(file = "Figure_5.pdf",width = 7,height = 3.5)
+par(mfrow = c(1,2))
+par(lwd = .25)
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+{
+  #CairoPDF(file = "test.pdf",width = 7,height = 3.5)
+  
+circos.clear()
+
+circos.par(start.degree = 34.47, track.height = .05,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,6), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(rnaseq_data),ytop = log10(rnaseq_data$Transcription),ybottom = 0.02,col = "#3f007d",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(rpob_regions),ytop = .98,ybottom = 0.02,col = "#54278f",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(gyra_regions),ytop = .98,ybottom = 0.02,col = "#6a51a3",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(g_quad_kaplan),ytop = .98,ybottom = 0.02,col = "#807dba",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(g_quad_hunter),ytop = .98,ybottom = 0.02,col = "#9e9ac8",border = NA)
+
+text(0,0,c(expression(paste(italic("Escherichia coli \n"))),
+           expression(paste("K-12 MG1655 ",Δ,italic("mutH")))),cex = .6)
+
+text(-1,1,substitute(paste(bold("A"))),cex = 0.83)
+text(1,1,substitute(paste(bold("B"))),cex = 0.83)
+
+circos.genomicLabels(bed = label,labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+{
+circos.clear()
+
+circos.par(start.degree = 34.47, track.height = .1,gap.after = 0, cell.padding = c(0,0,0,0),
+           track.margin = c(.005,.005), circle.margin = c(0.001,0.001), canvas.xlim = c(0,1), canvas.ylim = c(0,1))
+
+circos.initializeCircularGenome(name = "NC_000913.3",genome_size = 4641652,plotType = "none")
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "grey", bg.lwd = 0.25)
+
+circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1),labels.cex = .6,direction = "outside",lwd = .25,labels.pos.adjust = F)
+
+circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
+
+circos.track(ylim = c(0,6), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(rna_genes),ytop = rna_genes$Log10,ybottom = 0.02,col = "#3f007d",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(rpob_regions),ytop = .98,ybottom = 0.02,col = "#54278f",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(gyra_regions),ytop = .98,ybottom = 0.02,col = "#6a51a3",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(g_quad_kaplan),ytop = .98,ybottom = 0.02,col = "#807dba",border = NA)
+
+circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
+circos.genomicRect(as.data.frame(g_quad_hunter),ytop = .98,ybottom = 0.02,col = "#9e9ac8",border = NA)
+
+
+
+legend(x = .75,y = 1.,lty = 1,seg.len = -.5,box.lwd = .25, x.intersp = 1, cex = .6,lwd = 1,
+       legend = c("MutL-AR","RNA-Seq","RpoB","GyrA","G4 Kaplan","G4Hunter"),bty = "n",border = NA,
+       col = c("black","#3f007d","#54278f","#6a51a3","#807dba","#9e9ac8"), 
+       fill = c("lightgrey","white","white","white","white","white"))
+
+circos.genomicLabels(bed = label[1,],labels.column = 4,niceFacing = T,cex = .6,side = "inside",
+                     labels_height = 0.01, connection_height = .03,line_lwd = .25)
+
+}
+
+#dev.off()
+
+}
+
+```
+
+\onehalfspacing
+
+**Figure 5.** **Transcription activity within MutL-AR.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-AR, RNA-Seq (ranging from 0 to 6) , Log10 of transcription level), RpoB binding sites, GyrA binding sites, G4-prone sequences from Kaplan *et al.* (REF), and G4-prone sequences identified by G4Hunter. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs).
+
+\newpage
+
+```{r Figure 6, echo=FALSE, fig.height=5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
+
+### Import enrichment table obtained from EcoCyc ### 
+
+Gene_enrichment <- read_excel("Data/Gene_Enrichment_Table.xlsx",skip = 2) %>% na.omit()
+Gene_enrichment <- data.frame(Gene_enrichment, row.names = 1)
+Gene_enrichment$FDR <- format(Gene_enrichment$FDR, digits = 3)
+
+Gene_enrichment$Enrichment <- c(rep("Pathways", 4),
+                                rep("TR (direct)", 5),
+                                rep("GO - BP", 15),
+                                rep("GO - CC", 8),
+                                rep("GO - MF", 6))
+Gene_enrichment$Enrichment <- factor(Gene_enrichment$Enrichment)
+
+Gene_enrichment$Category <- rownames(Gene_enrichment)
+Gene_enrichment$FDR <- as.numeric(Gene_enrichment$FDR)
+
+A <- ggplot(Gene_enrichment)+
+  geom_col(aes(y = fct_reorder(Category, FDR,.desc = T), x = Number.of.genes, fill = FDR))+
+  facet_grid(rows = vars(Enrichment),scales = "free",space = "free")+
+  labs(x = "Number of genes", tag = "A")+
+  scale_fill_gradientn(colors = viridis_pal(option = "H",direction = -1)(38),limits = c(0,0.05))+
+  theme_pubr()+
+  theme(text = element_text(size = 7),strip.clip = "off",
+        strip.background = element_rect(size = .25), axis.title.y = element_blank(),
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25), plot.title = element_text(size = 7), legend.position = "right", legend.key.size = unit(2.5,"mm"), plot.tag = element_text(face = "bold",size = 10))
+
+
+### Obtain intergenic regions and calculate frequency
+NC_000913.3 <- data.frame(chr = "NC_000913.3",length = 4641652)
+genome <- import.gff3("Data/NC_000913.3.gff3")
+genome <- data.frame(genome) %>% filter(type == "gene" | type == "CDS")
+genome <- toGRanges(genome)
+intergenic <- gaps(genome,start = 0,end = NC_000913.3$length)
+intergenic <- data.frame(intergenic) %>% filter(strand == "*")
+genome2 <- data.frame(genome) %>% dplyr::select(seqnames, start,end, width,gene,strand) %>% unique() #%>% toGRanges()
+genome3 <- data.frame(genome)
+
+## Import files with 1bp ratio
+
+IP_Rep1_1bp <- LoadTrackFile(track.file = "Data/IP1_SES_1bp.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep1_1bp$Sample <- "IP-1"
+
+IP_Rep2_1bp <- LoadTrackFile(track.file = "Data/IP2_SES_1bp.bw",format = "bw",
+                                            region = "NC_000913.3:0-4641652",extend = 0)
+IP_Rep2_1bp$Sample <- "IP-2"
+
+
+intergenic2 <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  intergenic3 <- data.frame(gaps(genome,start = location_start, end = location_end)) %>% filter(strand == "*")
+  intergenic2 <- rbind(intergenic2,intergenic3)
+}
+
+intergenic_genome <- data.frame(Frequency = c((sum(intergenic$width))/NC_000913.3$length, sum(genome3$width)/NC_000913.3$length),
+                              Coding = c("No","Yes"),
+                              Type = "Genome")
+
+intergenic_peak <- data.frame(Frequency = c((sum(intergenic2$width)/sum(all_peaks_IP_mutH$Size)),
+                                                 (1-(sum(intergenic2$width)/sum(all_peaks_IP_mutH$Size)))),
+                                   Coding = c("No","Yes"),
+                              Type = "MutL-AR")
+
+intergenic_plot <- rbind(intergenic_genome,intergenic_peak)
+
+
+## Identify the summit for each peak ##
+
+summit_IP1 <- data.frame()
+
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(IP_Rep1_1bp, end+1 > location_start & end+1 < location_end),
+                          filter(IP_Rep1_1bp, start-1 > location_start & start-1 < location_end)) %>% 
+    unique() %>% dplyr::mutate(Peak = peak_region) %>% subset(score == max(score))
+  
+  summit_IP1 <- rbind(summit_IP1, temp) %>% subset(score > 0)
+}
+
+summit_IP2 <- data.frame()
+
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  temp <- rbind(filter(IP_Rep2_1bp, end+1 > location_start & end+1 < location_end),
+                          filter(IP_Rep2_1bp, start-1 > location_start & start-1 < location_end)) %>% 
+    unique() %>% dplyr::mutate(Peak = peak_region) %>% subset(score == max(score))
+  
+  summit_IP2 <- rbind(summit_IP2, temp) %>% subset(score > 0)
+}
+
+all_summits <- rbind(summit_IP1,summit_IP2) %>% dplyr::select(seqnames,start,end,Peak) %>% unique()
+
+## Calculate how many summits are in intergenic regions ##
+
+intergenic_summit <- data.frame()
+for (peak_region in 1:length(all_summits$Peak)) {
+  
+  location_start <- as.numeric(all_summits[peak_region, "start"])
+  location_end <- as.numeric(all_summits[peak_region, "end"])
+  
+  intergenic_summits0 <- data.frame(gaps(genome,start = location_start, end = location_end)) %>% filter(strand == "*")
+  intergenic_summit <- rbind(intergenic_summit,intergenic_summits0)
+}
+
+intergenic_summit_peak <- data.frame(Frequency = c((sum(intergenic_summit$width)/length(all_summits$seqnames)),
+                                                 (1-(sum(intergenic_summit$width)/length(all_summits$seqnames)))),
+                                   Coding = c("No","Yes"),
+                              Type = "MutL-AR \nsummit")
+
+
+intergenic_plot_summit <- rbind(intergenic_peak,intergenic_summit_peak, intergenic_genome)
+
+
+
+
+test_intergenic_summit_vs_MutLAR <- binom_test(x = 18, n = 66, p = 31111/(31111+122165)) %>% mutate(group1 = 2, group2 = 3, y.position = 1.06)
+
+
+test_intergenic_summit_vs_genome <- binom_test(x = 18, n = 66, p = 589588/(589588+4052065)) %>% mutate(group1 = 1, group2 = 2, y.position = 1.02)
+
+test_intergenic <- binom_test(x = 31111, n = 31111+122165, p = 589588/(589588+4052065)) %>% mutate(group1 = 1, group2 = 3, y.position = 1.12)
+
+test_intergenic <- binom_test(x = 31111, n = 31111+122165, p = 589588/(589588+4052065)) %>% mutate(group1 = 1, group2 = 2, y.position = 1.02)
+
+table <- as.table(cbind(c(589588,31111,18),c(4052065,122165,48)))
+rownames(table) <- c("Genome","MutL-AR","MutL-AR \nsummit")
+colnames(table) <- c("No","Yes")
+
+intergenic_prop_test <- pairwise_prop_test(x = table) 
+pairwise.prop.test(x = table)
+intergenic_prop_test[1,4] <- 2e-16
+
+B <- 
+  ggplot(intergenic_plot_summit)+
+  geom_col(aes(x = Type, y = Frequency, fill = Coding),color = "black", size = .25) +
+  stat_pvalue_manual(intergenic_prop_test[1,],label = "p < {p.adj}",y.position = 1.02, tip.length = 0, size = 7/.pt) +
+  stat_pvalue_manual(intergenic_prop_test[2,],label = "p = {format(p.adj, digits = 2)}",y.position = 1.18,tip.length = 0, size = 7/.pt) +
+  stat_pvalue_manual(intergenic_prop_test[3,],label = "p = {format(p.adj, digits = 2)}",y.position = 1.10,tip.length = 0, size = 7/.pt) +
+  scale_y_continuous(name = "Relative frequency",expand = c(0,0,0.1,0),breaks = c(0,.25,.5,.75,1)) +
+  scale_x_discrete(guide = guide_axis(angle = 45))+
+  scale_fill_manual(name = "Coding\n region",values = c("grey","black"))+
+  labs(tag = "B")+
+  theme_pubr() +
+  theme(axis.title.x = element_blank(),legend.position = "right",
+        #legend.position.inside = c(.5,1.2), legend.direction = "horizontal",
+        legend.title = element_text(size = 7),
+        plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))
+
+
+# Import the annotated genes in NC_000913.3
+
+genome <- import.gff3("Data/NC_000913.3.gff3")
+genome <- as.data.frame(genome)
+genome_genes <- genome %>% mutate(Sample = "Genes") %>% dplyr::rename(Start = start, End = end) %>% 
+  subset(type == "gene") %>% dplyr::select(Sample,Name, Start, End, type, strand, locus_tag)
+
+# Identify the genes located within the peak regions
+peak_genes_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_genes_mutH <- rbind(peak_genes_mutH,filter(genome_genes, End > location_start & End < location_end),
+                          filter(genome_genes, Start > location_start & Start < location_end)) %>% 
+    unique()
+  
+}
+peak_genes_mutH <- peak_genes_mutH[order(peak_genes_mutH$Name),]
+rownames(peak_genes_mutH) <- 1:length(peak_genes_mutH$Name)
+peak_genes_mutH$Type <- "MutL-AR"
+genome_genes$Type <- "Genome"
+
+# Prepare data
+genes <- rbind(peak_genes_mutH,genome_genes) %>%
+  mutate(Replichore = if_else(Start < 1590777 | Start > 3925804, "Right","Left"),
+         Direction = if_else(strand == "+", "forward", "reverse"))
+
+replichore_table <- table(genes$Replichore,genes$Type)
+
+
+replichore_test <- binom_test(x = 130,n = 130+103,p = 2214/(2280+2214)) %>% mutate(group1 = "Genome", group2 = "MutL-AR", y.position = 1.02) 
+
+C <- ggplot(genes)+
+  geom_bar(aes(x = Type, fill = Replichore),color = "black", size = .25, position = "fill") +
+  stat_pvalue_manual(replichore_test,label = "p = {format(p, digits = 2)}",tip.length = 0, size = 7/.pt) +
+  scale_y_continuous(name = "Relative frequency",expand = c(0,0,0.1,0),breaks = c(0,.25,.5,.75,1)) +
+  scale_x_discrete(guide = guide_axis(angle = 45))+
+  scale_fill_manual(name = "Replication\n arm",values = c("grey","black"))+
+  labs(tag = "C")+
+  theme_pubr() +
+  theme(axis.title.x = element_blank(),legend.position = "right", legend.title = element_text(size = 7),
+        plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))
+C
+
+
+A + (free(B)/free(C) + plot_layout(heights = c(1.2,1))) & theme(plot.margin = margin(0,0,0,0))
+
+#ggsave("Figure_6.pdf",width = 7,height = 4.5,units = "in")
+
+
+```
+
+\onehalfspacing
+
+**Figure 6. Genes and gene functions localized within the MutL-AR.** **A)** Enriched Gene Ontology Biological Process (GO - BP), Gene Ontology Cellular Component (GO - CC), Gene Ontology Molecular Function (GP - MF), Pathways, and Transcriptional Regulators (TR (direct)) obtained after gene enrichment analysis of the MutL-AR using the EcoCyc database. FDR, False Discovery Rate. **B)** Relative frequency of coding region in the genome and in MutL-AR. **C)** Relative frequency of genes in the right and left replication arm. For panels B a pairwise Proportion test with Holm’s correction. For panel C a Binomial test was used.
+
+\newpage
+
+```{r Figure 7, echo=FALSE, fig.height=8, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
+
+# Prepare data
+
+all_summits$Sample <- "MutL-AR summit"
+hupa_regions$Sample <- "HupA"
+hupb_regions$Sample <- "HupB"
+fis_regions$Sample <- "Fis"
+hns_regions$Sample <- "H-NS"
+gapR_regions$Sample <- "GapR"
+gc_content$Sample <- "GC content"
+Tm$Sample <- "Melting temperature"
+repetitive_bases$Sample <- "Microsatellites"
+cruciform$Sample <- "Cruciforms"
+ssdna$Sample <- "ssDNA"
+GATC_regions$Sample <- "GATC sites"
+rnaseq_data$Sample <- "RNA-seq"
+rnaseq_data <- rnaseq_data %>% dplyr::rename("start" = "Start", end = "End")
+rpob_regions$Sample <- "RpoB"
+gyra_regions$Sample <- "GyrA"
+g_quad_kaplan$Sample <- "G4 Kaplan"
+g_quad_hunter$Sample <- "G4Hunter"
+
+all_regions <- full_join(hupa_regions,hupb_regions)
+all_regions <- full_join(all_regions,fis_regions)
+all_regions <- full_join(all_regions,hns_regions)
+all_regions <- full_join(all_regions,gapR_regions)
+all_regions <- full_join(all_regions,gc_content)
+all_regions <- full_join(all_regions,Tm)
+all_regions <- full_join(all_regions,repetitive_bases)
+all_regions <- full_join(all_regions,cruciform)
+all_regions <- full_join(all_regions,ssdna)
+all_regions <- full_join(all_regions,GATC_regions)
+all_regions <- full_join(all_regions,rnaseq_data)
+all_regions <- full_join(all_regions,rpob_regions)
+all_regions <- full_join(all_regions,gyra_regions)
+all_regions <- full_join(all_regions,g_quad_kaplan)
+all_regions <- full_join(all_regions,g_quad_hunter)
+all_regions <- full_join(all_regions,all_summits)
+
+all_regions$Sample <- factor(all_regions$Sample, levels = c("HupA","HupB","Fis","H-NS","GapR",
+                                      "GC content", "Melting temperature", "Microsatellites", "Cruciforms", "ssDNA", "GATC sites",
+                                      "RNA-seq", "RpoB", "GyrA", "G4 Kaplan", "G4Hunter",
+                                      "MutL-AR summit"))
+
+fig7colors <- c("#67001f","#980043","#ce1256","#e7298a","#df65b0",
+                "#cb181d","#ef3b2c","#fb6a4a","orange",
+                "#54278f","#6a51a3","#807dba","#9e9ac8",
+                "black","#67000d","#a50f15","#3f007d")
+
+genome_genes <- genome_genes %>% mutate(strand = if_else(strand == "+", 1,0),
+                                         middle = (Start+End)/2)
+genome_genes$Sample <- "Genome"
+
+peak_genes_mutH <- peak_genes_mutH %>% mutate(middle = (Start+End)/2)
+peak_genes_mutH$Sample <- "Genome"
+genome_genes <- genome_genes %>% mutate(middle = (Start+End)/2)
+
+#### Plot examples of MutL-AR 1 and MutL-AR 6 ####
+peak = 1
+
+location_start <- all_peaks_IP_mutH$start[peak]
+location_end <- all_peaks_IP_mutH$end[peak]
+
+gene_plot <- ggplot(mapping = aes(fill = Sample, color = Sample, y = Sample)) +
+  geom_rect(data = dplyr::select(all_peaks_IP_mutH, -Sample),inherit.aes = F,
+            aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)
+
+gene_plot <- 
+  gene_plot +
+  
+  geom_text_repel(data = peak_genes_mutH,
+                  mapping = aes(x = middle),
+                  label = peak_genes_mutH$Name,
+                  fontface = "italic",
+                  nudge_y = .5,nudge_x = .1, 
+                  color = "black", size = 7/.pt)+
+  
+  geom_gene_arrow(data = genome_genes, 
+                  mapping = aes(xmin = Start,
+                          xmax = End, 
+                          y = Sample, 
+                          forward = strand), color = "black", fill = "black")+
+
+  scale_x_continuous(breaks = pretty(c(location_start-2500,location_end+2500)),
+                     name = "Genome position",
+                     limits = c(location_start-2500,location_end+2500), expand = c(0,0,0,0))+
+  
+  scale_y_discrete(name = NULL,expand = c(0,0.2))+
+  
+  theme_genes()+
+  theme(legend.position = "none",
+        axis.line.x = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7), plot.margin = margin(0,0,0,0))+
+  guides(color = "none")
+
+gene_plot_1 <- gene_plot
+
+
+regions_plot <- ggplot(data = all_regions,mapping = aes(fill = Sample, color = Sample)) +
+  geom_rect(data = dplyr::select(all_peaks_IP_mutH, -Sample),inherit.aes = F,
+            aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)+
+  
+  scale_x_continuous(limits = c(location_start-2500,location_end+2500),expand = c(0,0,0,0))+
+  labs(tag = "A")+
+  geom_rect(data = filter(all_regions, Sample != "RNA-seq", 
+                          Sample != "GC content", Sample != "Melting temperature"),
+            mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = +Inf, 
+                          y = Sample), lwd = .1)+
+  facet_wrap(.~Sample, ncol = 1, scales = "free")+
+  theme_pubr()+
+  theme(legend.position = "none",
+        axis.line = element_blank(), axis.ticks.x = element_blank(), 
+        axis.title = element_blank(), axis.text.x = element_blank(),
+        panel.border = element_rect(colour = "black", size = .25,fill = NA),
+        strip.background = element_blank(), strip.text = element_blank(),
+        axis.text.y = element_text(size = 7),
+        panel.spacing = unit(0,"mm"),plot.margin = margin(0,0,0,0)
+        )+
+  
+  geom_rect(data = all_regions,mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = log10(Transcription)))+
+  geom_step(data = all_regions,mapping = aes(x = start, y = `G.C`))+
+  geom_step(data = all_regions,mapping = aes(x = start, y = Tm))+
+ 
+ 
+  facetted_pos_scales(y = list(Sample == "RNA-seq" ~ scale_y_continuous(breaks = c(3),
+                                                                       limits = c(1,5),labels = "RNA-seq",
+                                                                       sec.axis = sec_axis(~ . ,
+                                                                                           breaks = c(2,4))),
+                               Sample == "GC content" ~ scale_y_continuous(breaks = .5, labels = "GC Content",
+                                                                           limits = c (0.2,0.8),
+                                                                           sec.axis = sec_axis(~ . ,
+                                                                                               breaks = c(.25,0.75), 
+                                                                                               )),
+                      Sample == "Melting temperature" ~ scale_y_continuous(breaks = c(95),
+                                                                       limits = c(70,120),labels = "Melting temperature",
+                                                                       sec.axis = sec_axis(~ . ,
+                                                                                           breaks = c(75,100)))))+
+    scale_color_manual(values = fig7colors)+
+    scale_fill_manual(values = fig7colors)
+
+regions_plot_1 <- regions_plot
+
+
+example1 <- (regions_plot_1/gene_plot_1 + plot_layout(heights = c(16,1.25)) & theme(axis.text.y.right = element_blank(),
+                                                                                     axis.ticks.y.right = element_blank(),
+                                                                                    plot.tag = element_text(size = 10,face = "bold")))
+
+peak = 6
+
+location_start <- all_peaks_IP_mutH$start[peak]
+location_end <- all_peaks_IP_mutH$end[peak]
+
+gene_plot <- ggplot(mapping = aes(fill = Sample, color = Sample, y = Sample)) +
+  geom_rect(data = dplyr::select(all_peaks_IP_mutH, -Sample),inherit.aes = F,
+            aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)
+
+gene_plot <- 
+  gene_plot +
+  
+  geom_text_repel(data = peak_genes_mutH,
+                  mapping = aes(x = middle),
+                  label = peak_genes_mutH$Name,
+                  fontface = "italic",
+                  nudge_y = .5,nudge_x = .1, 
+                  color = "black", size = 7/.pt)+
+  
+  geom_gene_arrow(data = genome_genes, 
+                  mapping = aes(xmin = Start,
+                          xmax = End, 
+                          y = Sample, 
+                          forward = strand), color = "black", fill = "black")+
+
+  scale_x_continuous(breaks = pretty(c(location_start-2500,location_end+2500)),
+                     name = "Genome position",
+                     limits = c(location_start-2500,location_end+2500), expand = c(0,0,0,0))+
+  
+  scale_y_discrete(name = NULL,expand = c(0,0.2))+
+  
+  theme_genes()+
+  theme(legend.position = "none",
+        axis.line.x = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7), plot.margin = margin(0,0,0,0))+
+  guides(color = "none")
+
+gene_plot_6 <- gene_plot
+
+
+regions_plot <- ggplot(data = all_regions,mapping = aes(fill = Sample, color = Sample)) +
+  geom_rect(data = dplyr::select(all_peaks_IP_mutH, -Sample),inherit.aes = F,
+            aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)+
+  
+  scale_x_continuous(limits = c(location_start-2500,location_end+2500),expand = c(0,0,0,0))+
+  labs(tag = "B")+
+  geom_rect(data = filter(all_regions, Sample != "RNA-seq", 
+                          Sample != "GC content", Sample != "Melting temperature"),
+            mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = +Inf, 
+                          y = Sample), lwd = .1)+
+  facet_wrap(.~Sample, ncol = 1, scales = "free")+
+  theme_pubr()+
+  theme(legend.position = "none",
+        axis.line = element_blank(), axis.ticks.x = element_blank(), 
+        axis.title = element_blank(), axis.text.x = element_blank(),
+        panel.border = element_rect(colour = "black", size = .25,fill = NA),
+        strip.background = element_blank(), strip.text = element_blank(),
+        axis.text.y = element_text(size = 7),
+        panel.spacing = unit(0,"mm"),plot.margin = margin(0,0,0,0)
+        )+
+  
+  geom_rect(data = all_regions,mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = log10(Transcription)))+
+  geom_step(data = all_regions,mapping = aes(x = start, y = `G.C`))+
+  geom_step(data = all_regions,mapping = aes(x = start, y = Tm))+
+ 
+ 
+  facetted_pos_scales(y = list(Sample == "RNA-seq" ~ scale_y_continuous(breaks = c(3),
+                                                                       limits = c(1,5),labels = "RNA-seq",
+                                                                       sec.axis = sec_axis(~ . ,
+                                                                                           breaks = c(2,4))),
+                               Sample == "GC content" ~ scale_y_continuous(breaks = .5, labels = "GC Content",
+                                                                           limits = c (0.2,0.8),
+                                                                           sec.axis = sec_axis(~ . ,
+                                                                                               breaks = c(.25,0.75), 
+                                                                                               )),
+                      Sample == "Melting temperature" ~ scale_y_continuous(breaks = c(95),
+                                                                       limits = c(70,120),labels = "Melting temperature",
+                                                                       sec.axis = sec_axis(~ . ,
+                                                                                           breaks = c(75,100)))))+
+    scale_color_manual(values = fig7colors)+
+    scale_fill_manual(values = fig7colors)
+
+regions_plot_6 <- regions_plot
+
+
+example_6 <- (regions_plot_6/gene_plot_6 + plot_layout(heights = c(16,1.25)) & theme(axis.text.y.left = element_blank(),
+                                                                                     axis.ticks.y.left = element_blank(),
+                                                                                     plot.tag = element_text(size = 10,face = "bold")))
+
+### Final composition ###
+
+(example1 | example_6) + plot_layout(widths = c(2,1))
+
+#ggsave("Figure_7.pdf",width = 7,height = 7)
+
+```
+
+\onehalfspacing
+
+**Figure 7.**
+
+\newpage
+
+```{r Supp Figure 1, echo=FALSE, fig.height=3.5, fig.width=3.5, message=FALSE, warning=FALSE,fig.align='center'}
+
+### Do histogram of MutL-AR size ### 
+
+gghistogram(all_peaks_IP_mutH, 
+            x = "Size",
+            add = "median",
+            bins = 15,
+            fill = "Sample",
+            size = .25,
+            xlab = "MutL-AR size (bp)",ylab = "Number of MutL-AR")+
+  scale_x_continuous(breaks = c(0,1500,3000,4500,6000,7500,9000,10500,12000))+
+  theme(legend.position = "none")+
+  theme(text = element_text(size = 7), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25), plot.title = element_text(size = 7))
+
+#ggsave("Sup_Fig_1.pdf",width = 3.5,height = 3.5,units = "in")
+
+```
+
+\onehalfspacing
+
+**Supplementary Figure 1. Distribution of MutL-AR sizes.** Histogram with 15 bins for the MutL-AR size. The dashed line indicates the median MutL-AR size.
+
+\newpage
+
+```{r Supp Figure 2, echo=FALSE, fig.height=3.5, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
+
+# Prepare data
+ORI <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "ORI"))) %>% mutate(Macrodomain = "ORI")
+NSR <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "NSR"))) %>% mutate(Macrodomain = "NSR")
+Right <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "Right"))) %>% mutate(Macrodomain = "Right")
+TER <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "TER"))) %>% mutate(Macrodomain = "TER")
+Left <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "Left"))) %>% mutate(Macrodomain = "Left")
+NSL <- data.frame(commonRegions(A = all_peaks_IP_mutH,B = subset(mac, Macrodomain == "NSL"))) %>% mutate(Macrodomain = "NSL")
+
+macro <- rbind(ORI,NSR,Right,TER,Left,NSL)
+cnt <- plyr::count(macro$Macrodomain)
+cnt$relfreq <- cnt$freq/38
+cnt$Macrodomain <- cnt$x
+cnt$Type <- "MutL-AR"
+
+cntGenome <- data.frame(relfreq = c((803000/4641652),(937000/4641652),(902499/4641652),(539000/4641652),(599153/4641652),(861000/4641652)),
+                        Macrodomain = c("Left","NSL","ORI","Right","NSR","TER"),
+                        width = c(803000,937000,902499,539000,599153,861000),
+                        Type = "Genome")
+
+cnt$Macrodomain <- factor(cnt$Macrodomain, 
+  levels = cnt$x[order(cnt$freq, decreasing = TRUE)])
+cntGenome$Macrodomain <- factor(cntGenome$Macrodomain, 
+  levels = cnt$x[order(cnt$freq, decreasing = TRUE)])
+
+cnt_fin <- full_join(cnt,cntGenome)
+
+macro$Type <- "MutL-AR"
+
+macro2 <- macro %>% group_by(Macrodomain) %>% summarise(width = sum(width))
+macro2 <- left_join(macro2,mac)
+macro2$macrosize <- macro2$end-macro2$start+1
+macro2$rel <- macro2$width/macro2$macrosize
+
+macro2$Macrodomain <- factor(macro2$Macrodomain, 
+  levels = macro2$Macrodomain[order(macro2$rel, decreasing = TRUE)])
+
+macro2$Type <- "Genome"
+
+table <- as.table(cbind(cnt$freq,c(803000,937000,902499,539000,599153,861000)))
+dimnames(table) <- list(Macrodomain = c("Left","NSL","NSR","ORI","Right","TER"),
+                        Type = c("mutH","genome"))
+
+A <-
+  ggplot(full_join(cnt,cntGenome))+
+  geom_col(aes(x = Type, y = relfreq, fill = Macrodomain, color = Macrodomain), size = .25) +
+  scale_y_continuous(name = "Relative frequency") +
+  labs(tag = "A")+
+  scale_fill_manual(name = "Macrodomain",values = c("darkblue","white","darkgreen","darkorange","white","lightblue"))+
+  scale_color_manual(name = "Macrodomain",values = c("black","darkblue","black","black","darkorange","black"))+
+  theme_pubr() +
+  theme(axis.title.x = element_blank(), legend.position = "none")+
+  scale_x_discrete(labels = c("Genome","MutL-AR"),guide = guide_axis(angle = 45))
+
+
+
+B <- 
+  ggplot(macro2)+
+  geom_col(aes(x = Macrodomain, y = rel, fill = Macrodomain, color = Macrodomain), size = .25)+
+  scale_y_continuous(name = "Frequency of MutL-AR \n coverage in Macrodomain") +
+  labs(tag = "B")+
+  scale_fill_manual(name = "Macrodomain",values = c("white","darkgreen","darkblue","white","darkorange","lightblue"))+
+  scale_color_manual(name = "Macrodomain",values = c("darkorange","black","black","darkblue","black","black"))+
+  theme_pubr()+
+  theme(legend.position = "none")
+
+macro_top <- wrap_plots(A,free(B),widths = c(1,3)) &
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))
+
+
+
+
+set.seed(1)
+hupa_vs_peaks <- permTest(A = hupa_ranges,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+set.seed(1)
+hupb_vs_peaks <- permTest(A = hupb_ranges,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+set.seed(1)
+fis_vs_peaks <- permTest(A = fis_ranges,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+set.seed(1)
+hns_vs_peaks <- permTest(A = hns_ranges,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+set.seed(1)
+gapR_vs_peaks <- permTest(A = gapR_regions,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+
+
+{
+hupa <- hupa_vs_peaks
+hupadist <- fitdistr(hupa$numOverlaps$permuted, "normal")
+
+hupaq90 <- as.numeric(quantile(hist(hupa$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+hupaq92 <- as.numeric(quantile(hist(hupa$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+hupahist_data <- hist(hupa$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+hupaplot_data <- data.frame(
+  x = hupahist_data$mids,
+  density = hupahist_data$density
+)
+
+hupamin_x <- min(c(hupa$numOverlaps$permuted, hupa$numOverlaps$observed))
+hupamax_p <- max(hupa$numOverlaps$permuted)
+hupamax_x <- max(c(hupa$numOverlaps$permuted, hupa$numOverlaps$observed))
+hupamean_p <- mean(hupa$numOverlaps$permuted)
+hupamean_o <- mean(hupa$numOverlaps$observed)
+
+
+C <- 
+  ggplot(hupaplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(hupamin_x,hupamax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "C")+
+  geom_segment(aes(x = hupamean_p, xend = hupamean_p, y = 0, yend = hupaq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = hupamean_o, xend = hupamean_o, y = 0, yend = hupaq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = hupamean_p, xend = hupamean_o, y = hupaq90*1.05, yend = hupaq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(hupamean_p,hupamean_o)),y = hupaq90*1.03, 
+           label = paste0("p = ", scales::number(hupa$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(hupa$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "HupA", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = hupadist$estimate[1], sd = hupadist$estimate[2]), size = .5, xlim = c(hupamin_x,hupamax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+  }
+
+top <- wrap_plots(macro_top,free(C),widths = c(2,1))
+
+{
+hupb <- hupb_vs_peaks
+hupbdist <- fitdistr(hupb$numOverlaps$permuted, "normal")
+
+hupbq90 <- as.numeric(quantile(hist(hupb$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+hupbq92 <- as.numeric(quantile(hist(hupb$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+hupbhist_data <- hist(hupb$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+hupbplot_data <- data.frame(
+  x = hupbhist_data$mids,
+  density = hupbhist_data$density
+)
+
+hupbmin_x <- min(c(hupb$numOverlaps$permuted, hupb$numOverlaps$observed))
+hupbmax_p <- max(hupb$numOverlaps$permuted)
+hupbmax_x <- max(c(hupb$numOverlaps$permuted, hupb$numOverlaps$observed))
+hupbmean_p <- mean(hupb$numOverlaps$permuted)
+hupbmean_o <- mean(hupb$numOverlaps$observed)
+
+
+D <- 
+  ggplot(hupbplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(hupbmin_x,hupbmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "D")+
+  geom_segment(aes(x = hupbmean_p, xend = hupbmean_p, y = 0, yend = hupbq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = hupbmean_o, xend = hupbmean_o, y = 0, yend = hupbq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = hupbmean_p, xend = hupbmean_o, y = hupbq90*1.05, yend = hupbq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(hupbmean_p,hupbmean_o)),y = hupbq90*1.05, 
+           label = paste0("p = ", scales::number(hupb$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(hupb$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "HupB", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = hupbdist$estimate[1], sd = hupbdist$estimate[2]), size = .5, xlim = c(hupbmin_x,hupbmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+{
+fis <- fis_vs_peaks
+fisdist <- fitdistr(fis$numOverlaps$permuted, "normal")
+
+fisq90 <- as.numeric(quantile(hist(fis$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+fisq92 <- as.numeric(quantile(hist(fis$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+fishist_data <- hist(fis$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+fisplot_data <- data.frame(
+  x = fishist_data$mids,
+  density = fishist_data$density
+)
+
+fismin_x <- min(c(fis$numOverlaps$permuted, fis$numOverlaps$observed))
+fismax_p <- max(fis$numOverlaps$permuted)
+fismax_x <- max(c(fis$numOverlaps$permuted, fis$numOverlaps$observed))
+fismean_p <- mean(fis$numOverlaps$permuted)
+fismean_o <- mean(fis$numOverlaps$observed)
+
+
+E <- 
+  ggplot(fisplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(fismin_x,fismax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "E")+
+  geom_segment(aes(x = fismean_p, xend = fismean_p, y = 0, yend = fisq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = fismean_o, xend = fismean_o, y = 0, yend = fisq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = fismean_p, xend = fismean_o, y = fisq90*1.05, yend = fisq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(fismean_p,fismean_o)),y = fisq90*1.05, 
+           label = paste0("p = ", scales::number(fis$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(fis$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "Fis", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = fisdist$estimate[1], sd = fisdist$estimate[2]), size = .5, xlim = c(fismin_x,fismax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+  }
+
+{
+hns <- hns_vs_peaks
+hnsdist <- fitdistr(hns$numOverlaps$permuted, "normal")
+
+hnsq90 <- as.numeric(quantile(hist(hns$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+hnsq92 <- as.numeric(quantile(hist(hns$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+hnshist_data <- hist(hns$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+hnsplot_data <- data.frame(
+  x = hnshist_data$mids,
+  density = hnshist_data$density
+)
+
+hnsmin_x <- min(c(hns$numOverlaps$permuted, hns$numOverlaps$observed))
+hnsmax_p <- max(hns$numOverlaps$permuted)
+hnsmax_x <- max(c(hns$numOverlaps$permuted, hns$numOverlaps$observed))
+hnsmean_p <- mean(hns$numOverlaps$permuted)
+hnsmean_o <- mean(hns$numOverlaps$observed)
+
+
+f <- 
+  ggplot(hnsplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(hnsmin_x,hnsmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "F")+
+  geom_segment(aes(x = hnsmean_p, xend = hnsmean_p, y = 0, yend = hnsq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = hnsmean_o, xend = hnsmean_o, y = 0, yend = hnsq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = hnsmean_p, xend = hnsmean_o, y = hnsq90*1.05, yend = hnsq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(hnsmean_p,hnsmean_o)),y = hnsq90*1.05, 
+           label = paste0("p = ", scales::number(hns$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(hns$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "H-NS", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = hnsdist$estimate[1], sd = hnsdist$estimate[2]), size = .5, xlim = c(hnsmin_x,hnsmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+middle <- wrap_plots(D, E, f)
+
+{
+gapr <- gapR_vs_peaks
+gaprdist <- fitdistr(gapr$numOverlaps$permuted, "normal")
+
+gaprq90 <- as.numeric(quantile(hist(gapr$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+gaprq92 <- as.numeric(quantile(hist(gapr$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+gaprhist_data <- hist(gapr$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+gaprplot_data <- data.frame(
+  x = gaprhist_data$mids,
+  density = gaprhist_data$density
+)
+
+gaprmin_x <- min(c(gapr$numOverlaps$permuted, gapr$numOverlaps$observed))
+gaprmax_p <- max(gapr$numOverlaps$permuted)
+gaprmax_x <- max(c(gapr$numOverlaps$permuted, gapr$numOverlaps$observed))
+gaprmean_p <- mean(gapr$numOverlaps$permuted)
+gaprmean_o <- mean(gapr$numOverlaps$observed)
+
+
+G <- 
+  ggplot(gaprplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(gaprmin_x,gaprmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "G")+
+  geom_segment(aes(x = gaprmean_p, xend = gaprmean_p, y = 0, yend = gaprq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = gaprmean_o, xend = gaprmean_o, y = 0, yend = gaprq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = gaprmean_p, xend = gaprmean_o, y = gaprq90*1.05, yend = gaprq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(gaprmean_p,gaprmean_o))*1.05,y = gaprq90*1.05, 
+           label = paste0("p = ", scales::number(gapr$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(gapr$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "GapR", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = gaprdist$estimate[1], sd = gaprdist$estimate[2]), size = .5, xlim = c(gaprmin_x,gaprmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+
+top / middle / (G + plot_spacer() + plot_spacer()) & theme(plot.margin = margin(1,1,1,1))
+
+#ggsave("Sup_Fig_2.pdf",width = 7,height = 7)
+
+```
+
+\onehalfspacing
+
+**Supplementary Figure 2. MutL-AR distribution in Macrodomains and nucleoid-associated proteins enrichment in MutL-AR .** **A)** Relative frequency of MutL-AR in each Macrodomain. **B)** Frequency of MutL-AR coverage for each Macrodomain. **C-G)** Histogram representing the Permutation test for the nucleoid-associated proteins (C) HupA, (D) HupB, (E) Fis, (F) H-NS, and (G) GapR. The grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
+
+\newpage
+
+```{r Supp Figure 3, echo=FALSE, fig.height=3.5, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
+
+# Select GC content bins within the peak regions
+peak_gc_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_gc_mutH <- rbind(peak_gc_mutH,filter(gc_content, end > location_start & end < location_end),
+                          filter(gc_content, start > location_start & start < location_end)) %>% 
+    unique()
+  
+}
+
+
+peak_gc_mutH$Type <- "MutL-AR"
+gc_content$Type <- "Genome"
+
+gc_total <- rbind(gc_content,peak_gc_mutH)
+
+
+stat_gc <- wilcox_test(gc_total,
+                        G.C ~ Type,
+                        ref.group = "Genome") 
+A <- 
+  ggdensity(gc_total, x = "G.C", fill = "Type",y = "density", size = .25)+
+  labs(y = "Density", x = "GC content", tag = "A")+
+  scale_fill_discrete(labels = c("Genome", "MutL-AR"))+
+  theme(legend.title = element_blank(),legend.position = "inside",legend.position.inside = c(0,.9),
+        legend.justification.inside = c(-.1,1), plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))+
+    annotate("text",x = .2,y = 8.3,label = paste0("Wilcoxon test, p = ", scientific(stat_gc$p,digits = 2)),
+            hjust = 0, size = 7/.pt)
+
+# Select Tm bins within the peak regions
+peak_Tm_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_Tm_mutH <- rbind(peak_Tm_mutH,filter(Tm, end > location_start & end < location_end),
+                          filter(Tm, start > location_start & start < location_end)) %>% 
+    unique()
+  
+}
+
+
+peak_Tm_mutH$Type <- "MutL-AR"
+Tm$Type <- "Genome"
+
+Tm_total <- rbind(Tm,peak_Tm_mutH)
+
+stat_tm <- wilcox_test(Tm_total,
+                        Tm ~ Type,
+                        ref.group = "Genome")
+
+
+B <-
+  ggdensity(Tm_total, x = "Tm", fill = "Type",y = "density", size = .25)+
+  labs(y = "Density", x = "Melting temperature", tag = "B")+
+  scale_fill_discrete(labels = c("Genome", "MutL-AR"))+
+  theme(legend.title = element_blank(),legend.position = "inside",legend.position.inside = c(0,.9),
+        legend.justification.inside = c(-.1,1), plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))+
+    annotate("text",x = 70,y = .15,label = paste0("Wilcoxon test, p = ", scientific(stat_tm$p,digits = 2)),
+            hjust = 0, size = 7/.pt)
+
+
+set.seed(1)
+repetitivebases_vs_peaks <- permTest(A = repetitive_bases_ranges,
+                                      B = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions, count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+rep <- repetitivebases_vs_peaks
+repdist <- fitdistr(rep$numOverlaps$permuted, "normal")
+
+repq90 <- as.numeric(quantile(hist(rep$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+repq92 <- as.numeric(quantile(hist(rep$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+rephist_data <- hist(rep$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+repplot_data <- data.frame(
+  x = rephist_data$mids,
+  density = rephist_data$density
+)
+
+repmin_x <- min(c(rep$numOverlaps$permuted, rep$numOverlaps$observed))
+repmax_p <- max(rep$numOverlaps$permuted)
+repmax_x <- max(c(rep$numOverlaps$permuted, rep$numOverlaps$observed))
+repmean_p <- mean(rep$numOverlaps$permuted)
+repmean_o <- mean(rep$numOverlaps$observed)
+
+
+C <- 
+  ggplot(repplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(repmin_x,repmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "C")+
+  geom_segment(aes(x = repmean_p, xend = repmean_p, y = 0, yend = repq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = repmean_o, xend = repmean_o, y = 0, yend = repq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = repmean_p, xend = repmean_o, y = repq90*1.05, yend = repq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(repmean_p,repmean_o)*1.01),y = repq90*1.05, 
+           label = paste0("p = ", scales::number(rep$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(rep$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "Microsatellites", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = repdist$estimate[1], sd = repdist$estimate[2]), size = .5, xlim = c(repmin_x,repmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+set.seed(1)
+cruciform_vs_peaks <- permTest(A = toGRanges(cruciform),
+                               B = all_peaks_IP_mutH,
+                               ntimes = n,
+                          randomize.function = randomizeRegions, count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+cruciform <- cruciform_vs_peaks
+cruciformdist <- fitdistr(cruciform$numOverlaps$permuted, "normal")
+
+cruciformq90 <- as.numeric(quantile(hist(cruciform$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+cruciformq92 <- as.numeric(quantile(hist(cruciform$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+cruciformhist_data <- hist(cruciform$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+cruciformplot_data <- data.frame(
+  x = cruciformhist_data$mids,
+  density = cruciformhist_data$density
+)
+
+cruciformmin_x <- min(c(cruciform$numOverlaps$permuted, cruciform$numOverlaps$observed))
+cruciformmax_p <- max(cruciform$numOverlaps$permuted)
+cruciformmax_x <- max(c(cruciform$numOverlaps$permuted, cruciform$numOverlaps$observed))
+cruciformmean_p <- mean(cruciform$numOverlaps$permuted)
+cruciformmean_o <- mean(cruciform$numOverlaps$observed)
+
+
+D <- 
+  ggplot(cruciformplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(cruciformmin_x,cruciformmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "D")+
+  geom_segment(aes(x = cruciformmean_p, xend = cruciformmean_p, y = 0, yend = cruciformq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = cruciformmean_o, xend = cruciformmean_o, y = 0, yend = cruciformq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = cruciformmean_p, xend = cruciformmean_o, y = cruciformq90*1.05, yend = cruciformq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(cruciformmean_p,cruciformmean_o)*1.01),y = cruciformq90*1.05, 
+           label = paste0("p = ", scales::number(cruciform$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(cruciform$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "Cruciforms", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = cruciformdist$estimate[1], sd = cruciformdist$estimate[2]), size = .5, xlim = c(cruciformmin_x,cruciformmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+  
+set.seed(1)
+ssdna_vs_peaks <- permTest(A = GRanges(ssdna),B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+
+
+{
+ssdna <- ssdna_vs_peaks
+ssdnadist <- fitdistr(ssdna$numOverlaps$permuted, "normal")
+
+ssdnaq90 <- as.numeric(quantile(hist(ssdna$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+ssdnaq92 <- as.numeric(quantile(hist(ssdna$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+ssdnahist_data <- hist(ssdna$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+ssdnaplot_data <- data.frame(
+  x = ssdnahist_data$mids,
+  density = ssdnahist_data$density
+)
+
+ssdnamin_x <- min(c(ssdna$numOverlaps$permuted, ssdna$numOverlaps$observed))
+ssdnamax_p <- max(ssdna$numOverlaps$permuted)
+ssdnamax_x <- max(c(ssdna$numOverlaps$permuted, ssdna$numOverlaps$observed))
+ssdnamean_p <- mean(ssdna$numOverlaps$permuted)
+ssdnamean_o <- mean(ssdna$numOverlaps$observed)
+
+
+E <- 
+  ggplot(ssdnaplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(ssdnamin_x,ssdnamax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "E")+
+  geom_segment(aes(x = ssdnamean_p, xend = ssdnamean_p, y = 0, yend = ssdnaq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = ssdnamean_o, xend = ssdnamean_o, y = 0, yend = ssdnaq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = ssdnamean_p, xend = ssdnamean_o, y = ssdnaq90*1.05, yend = ssdnaq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(ssdnamean_p,ssdnamean_o)*1.01),y = ssdnaq90*1.05, 
+           label = paste0("p = ", scales::number(ssdna$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(ssdna$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "ssDNA", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = ssdnadist$estimate[1], sd = ssdnadist$estimate[2]), size = .5, xlim = c(ssdnamin_x,ssdnamax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+
+set.seed(1)
+GATC_vs_peaks <- permTest(A = GRanges(GATC_regions),B = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions, 
+                          count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+GATC <- GATC_vs_peaks
+GATCdist <- fitdistr(GATC$numOverlaps$permuted, "normal")
+
+GATCq90 <- as.numeric(quantile(hist(GATC$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+GATCq92 <- as.numeric(quantile(hist(GATC$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+GATChist_data <- hist(GATC$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+GATCplot_data <- data.frame(
+  x = GATChist_data$mids,
+  density = GATChist_data$density
+)
+
+GATCmin_x <- min(c(GATC$numOverlaps$permuted, GATC$numOverlaps$observed))
+GATCmax_p <- max(GATC$numOverlaps$permuted)
+GATCmax_x <- max(c(GATC$numOverlaps$permuted, GATC$numOverlaps$observed))
+GATCmean_p <- mean(GATC$numOverlaps$permuted)
+GATCmean_o <- mean(GATC$numOverlaps$observed)
+
+
+f <- 
+  ggplot(GATCplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(GATCmin_x,GATCmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "F")+
+  geom_segment(aes(x = GATCmean_p, xend = GATCmean_p, y = 0, yend = GATCq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = GATCmean_o, xend = GATCmean_o, y = 0, yend = GATCq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = GATCmean_p, xend = GATCmean_o, y = GATCq90*1.05, yend = GATCq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(GATCmean_p,GATCmean_o)),y = GATCq90*1.05, 
+           label = paste0("p = ", scales::number(GATC$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(GATC$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = +Inf,y = +Inf, fontface = 2,
+             label = "GATC sites", hjust = 1, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = GATCdist$estimate[1], sd = GATCdist$estimate[2]), size = .5, xlim = c(GATCmin_x,GATCmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+## Import data of GATC methylation from Cohen,N.R., Ross,C.A., Jain,S., Shapiro,R.S., Gutierrez,A., Belenky,P., Li,H. and Collins,J.J. (2016) A role for the bacterial GATC methylome in antibiotic stress survival. Nat Genet, 48, 581–586 ##
+
+methylation_raw <- read_excel("Data/GATC_Methylation.xlsx",skip = 4) 
+
+# remove data points with NA so we can calculate the mean value per site
+methylation_raw <- na.exclude(methylation_raw)
+
+# calculate average for each site
+methylation <- data.frame(seqnames = "NC_000913.3",
+                          start = methylation_raw$Site,
+                          end = methylation_raw$Site,
+                          strand = methylation_raw$Strand,
+                          zero_hours = (methylation_raw[4]+
+                                        methylation_raw[5]+
+                                        methylation_raw[6])/3,
+                          one_hour = (methylation_raw[7]+
+                                        methylation_raw[8]+
+                                        methylation_raw[9])/3,
+                          two_hours = (methylation_raw[10]+
+                                        methylation_raw[11])/2,
+                          three_hours = (methylation_raw[12]+
+                                        methylation_raw[13]+
+                                        methylation_raw[14])/3,
+                          four_hours = (methylation_raw[15]+
+                                        methylation_raw[16]+
+                                        methylation_raw[17])/3)
+
+peak_methylation_mutH <- data.frame()
+for (peak_region in all_peaks_IP_mutH$name) {
+  
+  location_start <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "start"])
+  location_end <- as.numeric(all_peaks_IP_mutH[all_peaks_IP_mutH$name == peak_region, "end"])
+  
+  peak_methylation_mutH <- rbind(peak_methylation_mutH,filter(methylation, end > location_start & end < location_end),
+                          filter(methylation, start > location_start & start < location_end)) %>% 
+    unique()
+  
+}
+
+methylation$Type <- "Genome"
+peak_methylation_mutH$Type <- "MutL-AR"
+
+peak_methylation_mutH <- rbind(peak_methylation_mutH, methylation)
+peak_methylation_mutH$Type <- factor(peak_methylation_mutH$Type,levels = c("Genome", "MutL-AR"))
+
+methy_test <- wilcox_test(peak_methylation_mutH,
+                        X1h_LB_1 ~ Type,
+                        ref.group = "Genome")
+
+G <- 
+  ggviolin(peak_methylation_mutH, x = "Type",y = "X1h_LB_1", fill = "Type",trim = T, size = .25)+
+  labs(y = "GATC Methylation", x = NULL, tag = "G")+
+    scale_y_continuous(breaks = c(0.4,0.6,0.8,1.0),expand = c(.05,.05))+
+  stat_pwc(label = paste("Wilcoxon test, p = {scales::number(p,accuracy = 0.01)}"), size = .25,label.size = 7/.pt)+
+  theme(legend.position = "none", plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))
+
+(A + B + C) / (D + E + f) / (G + plot_spacer() + plot_spacer()) & theme(plot.margin = margin(0,5,0,0))
+
+#ggsave("Sup_Fig_3.pdf",width = 7,height = 7)
+
+```
+
+\onehalfspacing
+
+**Supplementary Figure 3. Local DNA sequence properties of the MutL-AR.** **A)** Density plot showing the GC content distribution in E. coli genome and in MutL-AR. GC content was calculated using 200 bp bins. B**)** Density plot showing the melting temperature distribution in E. coli genome and in MutL-AR. Melting temperature was calculated using 200 bp bins. **C-F)** Histogram representing the Permutation test for **C)** the location of microsatellites (mononucleotide repeats of 4 nucleotides or more), **D)** the location of cruciform regions (obtained using CIRI), **E)** the location of ssDNA, and **F)** the location of GATC sites. **G)** Violin plots showing the frequency of GATC methylation for the genome and MutL-AR. For panels C, D, E, and F, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
+
+\newpage
+
+```{r Supp Figure 4, echo=FALSE, fig.height=3.5, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
+
+# Prepare RNA-seq data
+peak_rna_mutH <- peak_rna_mutH %>% dplyr::rename(start = "Start", end = "End")  
+rna_genes <- rbind(peak_rna_mutH, rnaseq_data)
+rna_genes_original <-rbind(peak_rna_mutH_original, rnaseq_data_original)
+
+# Calculate log10 of transcription level
+rna_genes$Log10 <- log10(rna_genes$Transcription)
+rna_genes$Type <- factor(rna_genes$Type,levels = c("Genome", "MutL-AR"))
+
+stat_rna <- wilcox_test(rna_genes,
+                        Log10 ~ Type,
+                        ref.group = "Genome") 
+A <- 
+  ggdensity(rna_genes, x = "Log10", fill = "Type",y = "density", size = .25)+
+  labs(y = "Density", x = "Log10 Transcription level", tag = "A")+
+  scale_fill_discrete(labels = c("Genome", "MutL-AR"))+
+  theme(legend.title = element_blank(),legend.position = "inside",legend.position.inside = c(0.9,.9),
+        legend.justification.inside = c(1,1), plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"))+
+    annotate("text",x = 0,y = 2.4,label = paste0("Wilcoxon test, p = ", scientific(stat_rna$p,digits = 2)),
+            hjust = 0, size = 7/.pt)
+
+set.seed(1)
+rpob_vs_peaks <- permTest(A = rpob_regions,
+                                      B = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions, count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+rpob <- rpob_vs_peaks
+rpobdist <- fitdistr(rpob$numOverlaps$permuted, "normal")
+
+rpobq90 <- as.numeric(quantile(hist(rpob$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+rpobq92 <- as.numeric(quantile(hist(rpob$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+rpobhist_data <- hist(rpob$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+rpobplot_data <- data.frame(
+  x = rpobhist_data$mids,
+  density = rpobhist_data$density
+)
+
+rpobmin_x <- min(c(rpob$numOverlaps$permuted, rpob$numOverlaps$observed))
+rpobmax_p <- max(rpob$numOverlaps$permuted)
+rpobmax_x <- max(c(rpob$numOverlaps$permuted, rpob$numOverlaps$observed))
+rpobmean_p <- mean(rpob$numOverlaps$permuted)
+rpobmean_o <- mean(rpob$numOverlaps$observed)
+
+
+B <- 
+  ggplot(rpobplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(rpobmin_x,rpobmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "B")+
+  geom_segment(aes(x = rpobmean_p, xend = rpobmean_p, y = 0, yend = rpobq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = rpobmean_o, xend = rpobmean_o, y = 0, yend = rpobq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = rpobmean_p, xend = rpobmean_o, y = rpobq90*1.05, yend = rpobq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(rpobmean_p,rpobmean_o)*1.01),y = rpobq90*1.05, 
+           label = paste0("p = ", scales::number(rpob$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(rpob$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "RpoB", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = rpobdist$estimate[1], sd = rpobdist$estimate[2]), size = .5, xlim = c(rpobmin_x,rpobmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+set.seed(1)
+gyrA_vs_peaks <- permTest(A = gyra_regions,B = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions, count.once=TRUE,
+                         evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+gyra <- gyrA_vs_peaks
+gyradist <- fitdistr(gyra$numOverlaps$permuted, "normal")
+
+gyraq90 <- as.numeric(quantile(hist(gyra$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+gyraq92 <- as.numeric(quantile(hist(gyra$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+gyrahist_data <- hist(gyra$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+gyraplot_data <- data.frame(
+  x = gyrahist_data$mids,
+  density = gyrahist_data$density
+)
+
+gyramin_x <- min(c(gyra$numOverlaps$permuted, gyra$numOverlaps$observed))
+gyramax_p <- max(gyra$numOverlaps$permuted)
+gyramax_x <- max(c(gyra$numOverlaps$permuted, gyra$numOverlaps$observed))
+gyramean_p <- mean(gyra$numOverlaps$permuted)
+gyramean_o <- mean(gyra$numOverlaps$observed)
+
+
+C <- 
+  ggplot(gyraplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(gyramin_x,gyramax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "C")+
+  geom_segment(aes(x = gyramean_p, xend = gyramean_p, y = 0, yend = gyraq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = gyramean_o, xend = gyramean_o, y = 0, yend = gyraq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = gyramean_p, xend = gyramean_o, y = gyraq90*1.05, yend = gyraq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(gyramean_p,gyramean_o)*1.01),y = gyraq90*1.05, 
+           label = paste0("p = ", scales::number(gyra$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(gyra$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "GyrA", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = gyradist$estimate[1], sd = gyradist$estimate[2]), size = .5, xlim = c(gyramin_x,gyramax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+  
+set.seed(1)
+g_quad_kaplan_vs_peaks <- permTest(A = g_quad_kaplan,
+                                      B = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions, count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+
+{
+g_quad_kaplan <- g_quad_kaplan_vs_peaks
+g_quad_kaplandist <- fitdistr(g_quad_kaplan$numOverlaps$permuted, "normal")
+
+g_quad_kaplanq90 <- as.numeric(quantile(hist(g_quad_kaplan$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+g_quad_kaplanq92 <- as.numeric(quantile(hist(g_quad_kaplan$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+g_quad_kaplanhist_data <- hist(g_quad_kaplan$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+g_quad_kaplanplot_data <- data.frame(
+  x = g_quad_kaplanhist_data$mids,
+  density = g_quad_kaplanhist_data$density
+)
+
+g_quad_kaplanmin_x <- min(c(g_quad_kaplan$numOverlaps$permuted, g_quad_kaplan$numOverlaps$observed))
+g_quad_kaplanmax_p <- max(g_quad_kaplan$numOverlaps$permuted)
+g_quad_kaplanmax_x <- max(c(g_quad_kaplan$numOverlaps$permuted, g_quad_kaplan$numOverlaps$observed))
+g_quad_kaplanmean_p <- mean(g_quad_kaplan$numOverlaps$permuted)
+g_quad_kaplanmean_o <- mean(g_quad_kaplan$numOverlaps$observed)
+
+
+D <- 
+  ggplot(g_quad_kaplanplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(g_quad_kaplanmin_x,g_quad_kaplanmax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "D")+
+  geom_segment(aes(x = g_quad_kaplanmean_p, xend = g_quad_kaplanmean_p, y = 0, yend = g_quad_kaplanq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = g_quad_kaplanmean_o, xend = g_quad_kaplanmean_o, y = 0, yend = g_quad_kaplanq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = g_quad_kaplanmean_p, xend = g_quad_kaplanmean_o, y = g_quad_kaplanq90*1.05, yend = g_quad_kaplanq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(g_quad_kaplanmean_p,g_quad_kaplanmean_o)*1.01),y = g_quad_kaplanq90*1.05, 
+           label = paste0("p = ", scales::number(g_quad_kaplan$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(g_quad_kaplan$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "G4 Kaplan", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = g_quad_kaplandist$estimate[1], sd = g_quad_kaplandist$estimate[2]), size = .5, xlim = c(g_quad_kaplanmin_x,g_quad_kaplanmax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+
+set.seed(1)
+g_quad_hunter_vs_peaks <- permTest(A = g_quad_hunter,
+                                      B = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions, count.once=TRUE,
+                          evaluate.function = numOverlaps, genome = NC_000913.3)
+
+{
+g_quad_hunter <- g_quad_hunter_vs_peaks
+g_quad_hunterdist <- fitdistr(g_quad_hunter$numOverlaps$permuted, "normal")
+
+g_quad_hunterq90 <- as.numeric(quantile(hist(g_quad_hunter$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.90))
+g_quad_hunterq92 <- as.numeric(quantile(hist(g_quad_hunter$numOverlaps$permuted, breaks = 30, plot = FALSE)$density, 0.92))
+
+g_quad_hunterhist_data <- hist(g_quad_hunter$numOverlaps$permuted,breaks = 30, plot = FALSE)
+
+g_quad_hunterplot_data <- data.frame(
+  x = g_quad_hunterhist_data$mids,
+  density = g_quad_hunterhist_data$density
+)
+
+g_quad_huntermin_x <- min(c(g_quad_hunter$numOverlaps$permuted, g_quad_hunter$numOverlaps$observed))
+g_quad_huntermax_p <- max(g_quad_hunter$numOverlaps$permuted)
+g_quad_huntermax_x <- max(c(g_quad_hunter$numOverlaps$permuted, g_quad_hunter$numOverlaps$observed))
+g_quad_huntermean_p <- mean(g_quad_hunter$numOverlaps$permuted)
+g_quad_huntermean_o <- mean(g_quad_hunter$numOverlaps$observed)
+
+
+E <- 
+  ggplot(g_quad_hunterplot_data, aes(x = x, y = density))+
+  geom_bar(stat = "identity", color = "black", fill = "lightgrey", size = .25)+
+  xlim(g_quad_huntermin_x,g_quad_huntermax_x)+
+  scale_y_continuous(expand = c(0,0,0.1,0))+
+  labs(x = "Number of overlaps", y = "Density", tag = "E")+
+  geom_segment(aes(x = g_quad_huntermean_p, xend = g_quad_huntermean_p, y = 0, yend = g_quad_hunterq90), size = .5, lineend = "round")+
+  geom_segment(aes(x = g_quad_huntermean_o, xend = g_quad_huntermean_o, y = 0, yend = g_quad_hunterq90), color = "red", size = .5, lineend = "round")+
+  geom_segment(aes(x = g_quad_huntermean_p, xend = g_quad_huntermean_o, y = g_quad_hunterq90*1.05, yend = g_quad_hunterq90*1.05), color = "black", size = .5, lineend = "round")+
+  annotate("text", x = mean(c(g_quad_huntermean_p,g_quad_huntermean_o)),y = g_quad_hunterq90*1.05, 
+           label = paste0("p = ", scales::number(g_quad_hunter$numOverlaps$pval, accuracy = 0.001), 
+                          ", Z-score = ", scales::number(g_quad_hunter$numOverlaps$zscore, accuracy = 0.1)), vjust = -1, size = 7/.pt)+
+  annotate("text", x = -Inf,y = +Inf, fontface = 2,
+             label = "G4Hunter", hjust = -.5, vjust = 1.5, size = 8/.pt)+
+  stat_function(fun = function(x) dnorm(x, mean = g_quad_hunterdist$estimate[1], sd = g_quad_hunterdist$estimate[2]), size = .5, xlim = c(g_quad_huntermin_x,g_quad_huntermax_p)) +
+  theme_pubr()+
+  theme(text = element_text(size = 7),
+        plot.tag = element_text(size = 10,face = "bold"), 
+        axis.line = element_line(size = .25), axis.ticks = element_line(size = .25),
+        axis.text = element_text(size = 7), axis.title = element_text(size = 7,face = "plain"))
+
+}
+
+(A + B + C) / (D + E + plot_spacer()) & theme(plot.margin = margin(0,5,0,0))
+
+#ggsave("Sup_Fig_4.pdf",width = 7,height = 4.7)
+
+```
+
+\onehalfspacing
+
+**Supplementary Figure 4. Transcription activity within MutL-AR.** **A)** Density plot showing the Log10 transcription levels (REF) distribution in *E. coli* genome and in MutL-AR. **B-E)** Histogram representing the Permutation test for **B)** the location of RpoB binding sites, **C)** the location of GyrA binding sites, **D)** the location of G4-prone sequences from *Kaplan et al*., and **E)** the location of G4-prone sequences identified by G4Hunter. For panels **B-E**, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
+
+\newpage
+
+```{r Supp Figure 5, echo=FALSE, fig.height=5, fig.width=6, message=FALSE, warning=FALSE,fig.align='center'}
+library(ggfortify)
+library(ggplot2)
+
+### Import data ###
+data <- read_excel("Data/PCA_data.xlsx")
+PCA <- data[,-1:-4]
+rownames(PCA) <- data$`MutL-AR`
+
+PCA_data <- PCA %>% select(contains("rel"),`GC Content`,`Melting temp.`) 
+
+names(PCA_data) <- gsub(x = names(PCA_data),pattern = "_rel",replacement = "")
+
+### Do PCA ###
+res_PCA <- prcomp(PCA_data, scale. = T)
+
+### Plot PCA ###
+fviz_pca_biplot(res_PCA,repel = T, habillage = data$Ribosomal_tRNA,
+                labelsize = 3, pointsize = 2, pointshape = 20,
+                mean.point = F, palette = c("darkgrey","black"))+
+  theme_pubr()+
+  labs(color = "Ribosomal/tRNA",
+       shape = "Ribosomal/tRNA", 
+       fill = "Ribosomal/tRNA")+
+  theme(legend.position = "inside", legend.position.inside = c(.1,.9),
+        text = element_text(size = 7), 
+        legend.key.size = unit(1, "mm"))
+
+#ggsave("Sup_Fig_5.pdf",width = 6,height = 5)
+
+```
+
+\onehalfspacing
+
+**Supplementary Figure 5. Factors associated with MutL-AR.** Principal Component analysis (PCA) Biplot of MutL-AR and associated factors. The first two principal components are displayed in the axis, explaining a total of 52.7% of the total variance. Each numbered point correspond to a specific MutL-AR **(Supp. Table 1)**. Black points indicate MutL-AR that include ribosomal and/or tRNAs, while grey points indicate the opposite. The blue arrows represent the factors associated with MutL-AR, with the direction of the arrow indicating the direction in which each factor increases while the length of the arrow represents the strength of each factor influence on the principal components. Arrows that are closely located or point to the same direction suggest a positive correlation of those factors. Arrows pointing in opposite direction indicate factors that are negatively correlated.
