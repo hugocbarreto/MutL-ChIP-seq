@@ -210,11 +210,11 @@ epic2 <- filter(epic2, End-Start < 15000)
 
 # Import the bigwig file from each sample
 
-IP_Rep1_200bp <- LoadTrackFile(track.file = "IP1_SES_200bin.bw",format = "bw",
+IP_Rep1_200bp <- LoadTrackFile(track.file = "Data/IP1_SES_200bin.bw",format = "bw",
                                             region = "NC_000913.3:0-4641652",extend = 0)
 IP_Rep1_200bp$Sample <- "IP-Rep1"
 
-IP_Rep2_200bp <- LoadTrackFile(track.file = "IP2_SES_200bin.bw",format = "bw",
+IP_Rep2_200bp <- LoadTrackFile(track.file = "Data/IP2_SES_200bin.bw",format = "bw",
                                             region = "NC_000913.3:0-4641652",extend = 0)
 IP_Rep2_200bp$Sample <- "IP-Rep2"
 
@@ -2463,7 +2463,7 @@ G <-
 ```{r Supp Figure 4, echo=FALSE, fig.height=3.5, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
 
 # Prepare RNA-seq data
-peak_rna_mutH <- peak_rna_mutH %>% dplyr::rename(start = "Start", end = "End")  
+peak_rna_mutH <- peak_rna_mutH %>% dplyr::rename("Start" = "start", "End" = "end")  
 rna_genes <- rbind(peak_rna_mutH, rnaseq_data)
 rna_genes_original <-rbind(peak_rna_mutH_original, rnaseq_data_original)
 
@@ -2689,7 +2689,29 @@ E <-
 
 }
 
-(A + B + C) / (D + E + plot_spacer()) & theme(plot.margin = margin(0,5,0,0))
+direction_table <- table(genes$Direction,genes$Type)
+
+direction_test <- binom_test(x = 124,n = 124+109,p = 2209/(2209+2285)) %>% mutate(group1 = "Genome", group2 = "MutL-AR", y.position = 1.02) 
+
+f <- ggplot(genes)+
+  geom_bar(aes(x = Type, fill = Direction),color = "black", size = .25, position = "fill") +
+  stat_pvalue_manual(direction_test,label = "p = {format(p, digits = 2)}",tip.length = 0, size = 7/.pt) +
+  scale_y_continuous(name = "Relative frequency",expand = c(0,0,0.1,0),breaks = c(0,.25,.5,.75,1)) +
+  #scale_x_discrete(guide = guide_axis(angle = 45))+
+  scale_fill_manual(name = "Gene orientation",values = c("grey","black"))+
+  labs(tag = "F")+
+  theme_pubr() +
+  theme(axis.title.x = element_blank(),legend.position = "none", legend.title = element_text(size = 7),
+        plot.tag = element_text(size = 10, face = "bold"),
+        axis.line = element_line(size = .25),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 7),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(4,"mm"),aspect.ratio = 2)
+f
+
+
+(A + B + C) / (D + E + f) & theme(plot.margin = margin(0,5,0,0))
 
 #ggsave("Sup_Fig_4.pdf",width = 7,height = 4.7)
 
