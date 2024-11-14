@@ -11,7 +11,6 @@ header-includes:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(emojifont)
 library(figpatch)
 library(ggplot2)
 library(patchwork)
@@ -156,7 +155,7 @@ right <- (B / D / E) + plot_layout(heights = c(1,1,1))
 
 
 
-#cairo_pdf("Figure 1.pdf", width = 7,height = 7)
+#cairo_pdf("Figure 1.pdf", width = 7,height = 7,family = "sans")
 
 wrap_plots(left,right,widths = c(1.5,1)) &
   theme(text = element_text(size = 7),strip.clip = "off",
@@ -169,7 +168,7 @@ wrap_plots(left,right,widths = c(1.5,1)) &
 
 \onehalfspacing
 
-**Figure 1. Visualization and quantification of replication forks and replication errors in mutH-deficient E. coli. A)** Representative microscopy images showing E. coli cells expressing mCherry-DnaN and CFP-MutL fluorescent foci tagging replication forks and replication errors, respectively. Scale bar is 1 µm. **B)** Frequency of E. coli cells with 0, 2, 6, or ≥ 7 replication forks per cell, obtained from 93,861 cells. **C)** Frequency of MutL foci per cell, in cells with 0, 2, 6, or ≥ 7 replication forks obtained from 93,861 cells. **D)** Frequency of MutL foci per cell, in 93,861 cells. The red line and dots indicate the predicted Poisson distribution. **E)** Q-Q plot of MutL foci per cell obtained from 93,861 cells. The red line indicates the expected distribution if the data have a Poisson distribution.
+**Figure 1. Visualization and quantification of replication forks and replication errors in mutH-deficient *E. coli*. A)** Representative microscopy images showing *E. coli* cells expressing mCherry-DnaN and CFP-MutL fluorescent foci tagging replication forks and replication errors, respectively. Scale bar is 1 µm. **B)** Frequency of *E. coli* cells with 0, 2, 6, or ≥ 7 replication forks per cell, obtained from 93,861 cells. The numbers above the bars indicate the number of cells in each category. **C)** Frequency of MutL foci per cell, in cells with 0, 2, 6, or ≥ 7 replication forks obtained from 93,861 cells. **D)** Frequency of MutL foci per cell, in 93,861 cells. The red line and dots indicate the predicted Poisson distribution. **E)** Q-Q plot of the observed MutL foci per cell obtained from 93,861 cells and the theoretical quartiles when following a Poisson distribution. The red line indicates the expected distribution if the data have a Poisson distribution. For panels B, C, and D, a square root transformation was performed in the y-axis for better visualization of the lower frequencies.
 
 \newpage
 
@@ -226,7 +225,7 @@ brk <- c(0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5)*10^6
 
 {
 
-#CairoPDF("Figure_2.pdf",width = 7,height = 3.5)
+#cairo_pdf("Figure_2.pdf",width = 7,height = 3.5,,family = "sans")
 par(mfrow = c(1,2))
 par(mar = c(0.5, 0.5, 0.5, 0.5))
 {
@@ -390,7 +389,7 @@ f <- ggplot(mapping = aes(color = Sample))+
         axis.ticks = element_line(size = .25), 
         plot.title = element_text(size = 7))
 
-#cairo_pdf("MutL-AR_models.pdf", width = 7,height = 2)
+#cairo_pdf("MutL-AR_models.pdf", width = 7,height = 2,family = "sans")
 
 wrap_plots(D,E,f)
 
@@ -400,7 +399,7 @@ wrap_plots(D,E,f)
 
 \onehalfspacing
 
-**Figure 2.** **Localization and patterns of the MutL- AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of MutL-AR and the Log2 ratio (IP/Input) after scaling with SES. The order of the rings (from outside to inside) is: Combined (MutL-AR predicted by at least two software), MutL-AR predicted by MACS3, MutL-AR predicted by MOSAICS, MutL-AR predicted by epic2, and the Log2 ratio (IP/Input) after scaling with SES for two independent experiments. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). **C)** Schematics (top) representing the distribution of MutlS-MutL clamps in the event of mismatch and (bottom) MutL-AR showing similar patterns.
+**Figure 2.** **Localization and patterns of the MutL-ARs.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of MutL-ARs and the Log2 ratio (IP/Input) after scaling with Signal Extraction Scaling (SES). The order of the rings (from outside to inside) is: Combined (MutL-ARs predicted by at least two software), MutL-ARs predicted by MACS3, MutL-ARs predicted by MOSAICS, MutL-ARs predicted by epic2, and the Log2 ratio (IP/Input) after scaling with SES for two independent experiments. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). **C, D, and E)** Different shapes of the MutL-ARs peaks. The upper row of panels **C**, **D**, and **E** contains schematic drawings demonstrating how the number of the replication error sites (mismatches), as well as the position of a mismatch relative to the replication fork, may be responsible for the appearance of the different shapes of MutL-ARs peaks we observed in this study (bottom row). Bifurcating arrows indicate the loading site and the sliding of MutS and MutL protein clamps away from the mismatch site. Schematic drawings in panels **C** and **D** show bidirectional symmetrical sliding of MutS and MutL protein clamps from a single mismatch, as supported by *in vitro* data: **C** same localization of a single mismatch in different genomes, resulting in a single-summit MutL-AR peak (bottom), and **D** different but close localization of single mismatches in different genomes resulting, in overlapping MutL-ARs peaks (bottom). Schematic drawing in panel **E** shows asymmetric sliding of MutS and MutL protein clamps away from the mismatch site towards replication fork, as supported by the *in vivo* data, resulting in an asymmetric MutL-AR peak with a summit shifted towards replication origin (bottom). Examples of observed MutL-ARs’ peaks shown in the bottom row of panels the **C**, **D**, and **E** correspond to peaks number 33, 28 and 32, respectively. Two different colored lines show that the shapes of the MutL-ARs’ peaks were practically identical in two independent experiments.
 
 \newpage
 
@@ -563,7 +562,7 @@ for (peak_region in all_peaks_IP_mutH$name) {
 ### Do circular plot ###
 
 {
-#CairoPDF(file = "Figure_3.pdf",width = 7,height = 3.5)
+#cairo_pdf(file = "Figure_3.pdf",width = 7,height = 3.5,family = "sans")
 par(mfrow = c(1,2))
 par(lwd = .25)
 par(mar = c(0.5, 0.5, 0.5, 0.5))
@@ -677,7 +676,7 @@ legend(x = .8,y = 1.,lty = 1,seg.len = -.5,box.lwd = .25, x.intersp = 1, cex = .
 
 \onehalfspacing
 
-**Figure 3.** **Global chromosome structure and nucleoid-associated proteins binding sites in the MutL-AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of MutL-AR, the Macrodomains and nucleoid-associated proteins binding sites. The order of the rings (from outside to inside) is: macrodomains, MutL-AR, HupA, HupB, Fis, H-NS, and GapR binding sites. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). NSL, non-structured left. NSR, non-structured right.
+**Figure 3.** **Global chromosome structure and nucleoid-associated proteins binding sites in the MutL-ARs.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of MutL-ARs, the Macrodomains and nucleoid-associated proteins binding sites. The order of the rings (from outside to inside) is: macrodomains, MutL-ARs, HupA, HupB, Fis, H-NS, and GapR binding sites. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs). NSL, non-structured left. NSR, non-structured right.
 
 \newpage
 
@@ -706,9 +705,9 @@ peaks_gc <- letterFrequency(peaks_gc, "GC", as.prob = TRUE)
 ### Calculate melting temperature per 200 bp bin ###
 
 Tm <- data.frame()
-for (n in 1:length(genome_bins)) {
+for (nbins in 1:length(genome_bins)) {
  
-  Tmtemp <- Tm_NN(ntseq = as.character(genome_bins[[n]]), nn_table = "DNA_NN1", Na = 50)
+  Tmtemp <- Tm_NN(ntseq = as.character(genome_bins[[nbins]]), nn_table = "DNA_NN1", Na = 50)
   Tm <- rbind(Tm, Tmtemp[[1]])
 }
 
@@ -717,9 +716,9 @@ Tm <- cbind(gc_content,Tm) %>% select(seqnames,start,end,Tm)
 
 peaks_gc <- genome_fasta[toGRanges(all_peaks_IP_mutH)]
 Tm_peaks <- data.frame()
-for (n in 1:length(peaks_gc)) {
+for (npeaks in 1:length(peaks_gc)) {
  
-  Tmtemp <- Tm_NN(ntseq = as.character(peaks_gc[[n]]), nn_table = "DNA_NN1", Na = 50)
+  Tmtemp <- Tm_NN(ntseq = as.character(peaks_gc[[npeaks]]), nn_table = "DNA_NN1", Na = 50)
   Tm_peaks <- rbind(Tm_peaks, Tmtemp[[1]])
 }
 
@@ -736,12 +735,6 @@ for (peak_region in all_peaks_IP_mutH$name) {
     unique()
   
 }
-
-
-peak_Tm_mutH$Type <- "MutL-AR"
-Tm_values$Type <- "Genome"
-
-Tm_total <- rbind(Tm_values,peak_Tm_mutH)
 
 ### Identify microsatellites ###
 
@@ -908,7 +901,7 @@ bins_gatc$count <- mapply(count_overlaps, bins_gatc$start, bins_gatc$end, MoreAr
 
 
 {
-#CairoPDF(file = "Figure_4.pdf",width = 7,height = 3.5)
+#cairo_pdf(file = "Figure_4.pdf",width = 7,height = 3.5,family = "sans")
 par(mfrow = c(1,2))
 par(lwd = .25)
 par(mar = c(0.5, 0.5, 0.5, 0.5))
@@ -1027,7 +1020,7 @@ circos.genomicLabels(bed = label[1,],labels.column = 4,niceFacing = T,cex = .6,s
 
 \onehalfspacing
 
-**Figure 4.** **Local DNA sequence properties of the MutL-AR.** **A)** Circular map of E. coli K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-AR, GC content per 200 bp (ranging from 0 to 1), melting temperature per 200 bp (ranging from 70 to 120), number of microsatellites (mononucleotide repeats of 4 nucleotides or more) per 1000 bp (ranging from 0 to 35), number of cruciform-prone sequences per 1000 bp (ranging from 0 to 20), ssDNA location, and number of GATC sites per 1000 bp (ranging from 0 to 23. The numbers located on the outermost indicate genome coordinates in megabase pairs (Mbs).
+**Figure 4.** **Mapping the local DNA sequence properties of the MutL-ARs.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-ARs, GC content per 200 bp (ranging from 0 to 1), melting temperature per 200 bp (ranging from 70 to 120), number of microsatellites (mononucleotide repeats of 4 nucleotides or more) per 1000 bp (ranging from 0 to 35), number of cruciform-prone sequences per 1000 bp (ranging from 0 to 20), ssDNA location, and number of GATC sites per 1000 bp (ranging from 0 to 23). The numbers located on the outermost indicate genome coordinates in megabase pairs (Mbs).
 
 ```{r Figure 5, echo=FALSE, fig.height=3.5, fig.width=7, fig.align='center', message=FALSE, warning=FALSE}
 
@@ -1163,7 +1156,7 @@ for (peak_region in all_peaks_IP_mutH$name) {
 
 
 {
-#CairoPDF(file = "Figure_5.pdf",width = 7,height = 3.5)
+#cairo_pdf(file = "Figure_5.pdf",width = 7,height = 3.5,family = "sans")
 par(mfrow = c(1,2))
 par(lwd = .25)
 par(mar = c(0.5, 0.5, 0.5, 0.5))
@@ -1224,7 +1217,7 @@ circos.axis(h = "top", major.at = brk,minor.ticks = 4,labels = round(brk/10^6, 1
 circos.genomicRect(as.data.frame(all_peaks_IP_mutH),ytop = 1,ybottom = 0,col = "black",border = NA)
 
 circos.track(ylim = c(0,6), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
-circos.genomicRect(as.data.frame(rna_genes),ytop = rna_genes$Log10,ybottom = 0.02,col = "#3f007d",border = NA)
+circos.genomicRect(as.data.frame(rnaseq_data),ytop = log10(rnaseq_data$Transcription),ybottom = 0.02,col = "#3f007d",border = NA)
 
 circos.track(ylim = c(0,1), bg.border = "black", bg.col = "white", bg.lwd = 0.25)
 circos.genomicRect(as.data.frame(rpob_regions),ytop = .98,ybottom = 0.02,col = "#54278f",border = NA)
@@ -1258,7 +1251,7 @@ circos.genomicLabels(bed = label[1,],labels.column = 4,niceFacing = T,cex = .6,s
 
 \onehalfspacing
 
-**Figure 5.** **Transcription activity within MutL-AR.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-AR, RNA-Seq (ranging from 0 to 6) , Log10 of transcription level), RpoB binding sites, GyrA binding sites, G4-prone sequences from Kaplan *et al.* (REF), and G4-prone sequences identified by G4Hunter. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs).
+**Figure 5. Mapping the transcription activity within MutL-ARs.** **A)** Circular map of *E. coli* K-12 MG1655 and **B)** zoomed section showing the localization of (from outside to inside) MutL-ARs, RNA-Seq (ranging from 0 to 6), Log10 of transcription level), RpoB binding sites, GyrA binding sites, G4-prone sequences from Kaplan *et al.* (23), and G4-prone sequences identified by G4Hunter. The numbers located on the outermost ring indicate genome coordinates in megabase pairs (Mbs).
 
 \newpage
 
@@ -1284,7 +1277,7 @@ A <- ggplot(Gene_enrichment)+
   geom_col(aes(y = fct_reorder(Category, FDR,.desc = T), x = Number.of.genes, fill = FDR))+
   facet_grid(rows = vars(Enrichment),scales = "free",space = "free")+
   labs(x = "Number of genes", tag = "A")+
-  scale_fill_gradientn(colors = viridis_pal(option = "H",direction = -1)(38),limits = c(0,0.05))+
+  scale_fill_gradientn(name = "Adjusted \np-value",colors = viridis_pal(option = "H",direction = -1)(38),limits = c(0,0.05))+
   theme_pubr()+
   theme(text = element_text(size = 7),strip.clip = "off",
         strip.background = element_rect(size = .25), axis.title.y = element_blank(),
@@ -1299,7 +1292,6 @@ genome <- toGRanges(genome)
 intergenic <- gaps(genome,start = 0,end = NC_000913.3$length)
 intergenic <- data.frame(intergenic) %>% filter(strand == "*")
 genome2 <- data.frame(genome) %>% dplyr::select(seqnames, start,end, width,gene,strand) %>% unique() #%>% toGRanges()
-genome3 <- data.frame(genome)
 
 ## Import files with 1bp ratio
 
@@ -1322,7 +1314,7 @@ for (peak_region in all_peaks_IP_mutH$name) {
   intergenic2 <- rbind(intergenic2,intergenic3)
 }
 
-intergenic_genome <- data.frame(Frequency = c((sum(intergenic$width))/NC_000913.3$length, sum(genome3$width)/NC_000913.3$length),
+intergenic_genome <- data.frame(Frequency = c((sum(intergenic$width))/NC_000913.3$length, sum(genome2$width)/NC_000913.3$length),
                               Coding = c("No","Yes"),
                               Type = "Genome")
 
@@ -1402,7 +1394,7 @@ table <- as.table(cbind(c(589588,31111,18),c(4052065,122165,48)))
 rownames(table) <- c("Genome","MutL-AR","MutL-AR \nsummit")
 colnames(table) <- c("No","Yes")
 
-intergenic_prop_test <- pairwise_prop_test(x = table) 
+intergenic_prop_test <- pairwise_prop_test(x = table,p.adjust.method = "BH") 
 pairwise.prop.test(x = table)
 intergenic_prop_test[1,4] <- 2e-16
 
@@ -1479,17 +1471,17 @@ C <- ggplot(genes)+
         legend.key.size = unit(4,"mm"))
 C
 
-
-A + (free(B)/free(C) + plot_layout(heights = c(1.2,1))) & theme(plot.margin = margin(0,0,0,0))
-
-#ggsave("Figure_6.pdf",width = 7,height = 4.5,units = "in")
+#cairo_pdf(filename = "Figure_6.pdf",width = 7,height = 4.5,family = "sans")
+A + (free(B)/free(C) + plot_layout(heights = c(1.2,1))) & theme(plot.margin = margin(0,0,0,0),
+                                                                axis.ticks = element_line(size = .25))
+#dev.off()
 
 
 ```
 
 \onehalfspacing
 
-**Figure 6. Genes and gene functions localized within the MutL-AR.** **A)** Enriched Gene Ontology Biological Process (GO - BP), Gene Ontology Cellular Component (GO - CC), Gene Ontology Molecular Function (GP - MF), Pathways, and Transcriptional Regulators (TR (direct)) obtained after gene enrichment analysis of the MutL-AR using the EcoCyc database. FDR, False Discovery Rate. **B)** Relative frequency of coding region in the genome and in MutL-AR. **C)** Relative frequency of genes in the right and left replication arm. For panels B a pairwise Proportion test with Holm’s correction. For panel C a Binomial test was used.
+**Figure 6. Genes and gene functions localized within the MutL-AR. A)** Enriched Gene Ontology Biological Process (GO - BP), Gene Ontology Cellular Component (GO - CC), Gene Ontology Molecular Function (GP - MF), Pathways, and Transcriptional Regulators (TR (direct)) obtained after gene enrichment analysis of the MutL-AR using the EcoCyc database. FDR, False Discovery Rate. **B)** Relative frequency of coding region in the genome and in MutL-AR. **C)** Relative frequency of genes in the right and left replication arm. For panels B a pairwise Proportion test with Holm’s correction. For panel C a Binomial test was used.
 
 \newpage
 
@@ -1598,7 +1590,7 @@ regions_plot <- ggplot(data = all_regions,mapping = aes(fill = Sample, color = S
             aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)+
   
   scale_x_continuous(limits = c(location_start-2500,location_end+2500),expand = c(0,0,0,0))+
-  labs(tag = "A")+
+  labs(tag = "B")+
   geom_rect(data = filter(all_regions, Sample != "RNA-seq", 
                           Sample != "GC content", Sample != "Melting temperature"),
             mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = +Inf, 
@@ -1688,7 +1680,7 @@ regions_plot <- ggplot(data = all_regions,mapping = aes(fill = Sample, color = S
             aes(xmin = start, xmax = end, ymax = +Inf, ymin = -Inf), fill = "lightgrey",color = NA,  alpha = 0.5)+
   
   scale_x_continuous(limits = c(location_start-2500,location_end+2500),expand = c(0,0,0,0))+
-  labs(tag = "B")+
+  labs(tag = "C")+
   geom_rect(data = filter(all_regions, Sample != "RNA-seq", 
                           Sample != "GC content", Sample != "Melting temperature"),
             mapping = aes(xmin = start, xmax = end, ymin = -Inf, ymax = +Inf, 
@@ -1732,17 +1724,49 @@ example_6 <- (regions_plot_6/gene_plot_6 + plot_layout(heights = c(16,1.25)) & t
                                                                                      axis.ticks.y.left = element_blank(),
                                                                                      plot.tag = element_text(size = 10,face = "bold")))
 
+### Do PCA ###
+
+library(ggfortify)
+library(ggplot2)
+library(factoextra)
+
+### Import data ###
+data <- read_excel("Data/PCA_data.xlsx")
+PCA <- data[,-1:-4]
+rownames(PCA) <- data$`MutL-AR`
+
+PCA_data <- PCA %>% select(contains("rel"),`GC Content`,`Melting temp.`) 
+
+names(PCA_data) <- gsub(x = names(PCA_data),pattern = "_rel",replacement = "")
+
+res_PCA <- prcomp(PCA_data, scale. = T)
+
+pca <- fviz_pca_biplot(res_PCA,repel = T, habillage = data$Ribosomal_tRNA,
+                labelsize = 3, pointsize = 2, pointshape = 20,
+                mean.point = F, palette = c("darkgrey","black"))+
+  theme_pubr()+
+  labs(color = "Ribosomal/tRNA",
+       shape = "Ribosomal/tRNA", 
+       fill = "Ribosomal/tRNA",
+       tag = "A")+
+  theme(legend.position = "inside", legend.position.inside = c(.1,.9),
+        text = element_text(size = 7), 
+        legend.key.size = unit(1, "mm"),
+        axis.line = element_line(linewidth = .25), axis.ticks = element_line(linewidth = .25))
+
 ### Final composition ###
 
-(example1 | example_6) + plot_layout(widths = c(2,1))
+fig7bottom <- (example1 | example_6) + plot_layout(widths = c(2,1))
 
-#ggsave("Figure_7.pdf",width = 7,height = 7)
+#cairo_pdf("Figure_72.pdf",width = 7,height = 9,family = "sans")
+pca/fig7bottom + plot_layout(heights = c(1,2)) & theme(plot.tag = element_text(size = 10, face = "bold"))
+#dev.off()
 
 ```
 
 \onehalfspacing
 
-**Figure 7.**
+**Figure 7.** **Sequence properties and protein interactions at MutL-associated replication error hotspots. A)** Principal Component Analysis (PCA) Biplot of MutL-ARs and associated features. The first two principal components (Dim1 and Dim2) are displayed on the axes, explaining the largest amount of variance (52.7%). Dim1 explains 32.5% of the variance and is primarily driven by factors related to DNA structure and stability (GC content, Melting temperature, GyrA, HupA, HupB, and GapR). Dim2 explains 20.2% of the variance and is primarily driven by regulatory elements (H-NS, Fis, Microsatellites and GATC sites). The lower left quadrant features elements that influence or respond to transcription activity, while the lower right quadrant features elements that impact or respond to supercoiling. Each numbered point corresponds to a specific MutL-AR (see Supp. Table 1). Black points indicate MutL-AR that include genes coding for ribosomal and/or tRNAs, while grey points indicate MutL-ARs containing other genes. The blue arrows represent the features associated with MutL-ARs. The direction of each arrow indicates the direction in which each feature increases, while the length of the arrow represents the strength of each feature’s influence on the principal components. Arrows that are closely located or point in the same direction suggest a positive correlation between those factors. Arrows pointing in opposite directions indicate factors that are negatively correlated. **B-C)** Two genomic regions showing representative MutL-ARs (number 1 and 6), their DNA sequence properties, distribution of protein binding sites and gene expression levels, which are enriched or depleted in these regions. These examples emphasize the involvement of the high transcription activity and presence of sequences prone to form secondary structures in the localization of replication error hots spots. **B)** The MutL-ARs summit positions colocalize with highly expressed genes and an enrichment of inverted repeats prone to cruciform formation. The intergenic region immediately upstream from the MutL-ARs summit position colocalize with sequences of low thermal stability, ssDNA gap region, sequences enriched for microsatellites, and the localization of Fis, GapR and RpoB binding sites. **C)** The colocalization of the MutL-ARs summit position within the tRNA coding gene array with high gene expression, sequences enriched for microsatellites, and inverted repeats prone to cruciform formation, alongside the depletion of the GATC sequences. The intergenic region immediately upstream from the tRNA coding gene array colocalizes with sequences of low thermal stability, and the localization of Fis, HupB and RpoB binding sites. The grey rectangles indicate the MutL-ARs. The grey dashed rectangular lines highlight a portion of the MutL-ARs around the summit of each ChiP-Seq replicate, for which an overlap of several factors shown to be enriched or depleted in the MutL-ARs is observed. Values for RNA-seq represent the Log10 of transcription. GC content and melting temperature are represented is 200 bp bins. Gene arrows are represented to scale.
 
 \newpage
 
@@ -1768,7 +1792,7 @@ gghistogram(all_peaks_IP_mutH,
 
 \onehalfspacing
 
-**Supplementary Figure 1. Distribution of MutL-AR sizes.** Histogram with 15 bins for the MutL-AR size. The dashed line indicates the median MutL-AR size.
+**Supplementary Figure 1.** **Distribution of MutL-AR sizes.** Histogram with 15 bins for the MutL-AR size. The dashed red line indicates the median MutL-AR size (2463 bp).
 
 \newpage
 
@@ -1821,10 +1845,11 @@ A <-
   geom_col(aes(x = Type, y = relfreq, fill = Macrodomain, color = Macrodomain), size = .25) +
   scale_y_continuous(name = "Relative frequency") +
   labs(tag = "A")+
-  scale_fill_manual(name = "Macrodomain",values = c("darkblue","white","darkgreen","darkorange","white","lightblue"))+
-  scale_color_manual(name = "Macrodomain",values = c("black","darkblue","black","black","darkorange","black"))+
+  scale_fill_manual(name = "MD",values = c("darkblue","white","darkgreen","darkorange","white","lightblue"))+
+  scale_color_manual(name = "MD",values = c("black","darkblue","black","black","darkorange","black"))+
   theme_pubr() +
-  theme(axis.title.x = element_blank(), legend.position = "none")+
+  theme(axis.title.x = element_blank(), legend.position = "right", 
+        legend.key.size = unit(3,"mm"), legend.key.spacing = unit(0.5,"mm"),legend.spacing = unit(0.5,"mm"))+
   scale_x_discrete(labels = c("Genome","MutL-AR"),guide = guide_axis(angle = 45))
 
 
@@ -1832,7 +1857,7 @@ A <-
 B <- 
   ggplot(macro2)+
   geom_col(aes(x = Macrodomain, y = rel, fill = Macrodomain, color = Macrodomain), size = .25)+
-  scale_y_continuous(name = "Frequency of MutL-AR \n coverage in Macrodomain") +
+  scale_y_continuous(name = "Fraction of MutL-AR \n coverage in Macrodomain") +
   labs(tag = "B")+
   scale_fill_manual(name = "Macrodomain",values = c("white","darkgreen","darkblue","white","darkorange","lightblue"))+
   scale_color_manual(name = "Macrodomain",values = c("darkorange","black","black","darkblue","black","black"))+
@@ -1849,23 +1874,23 @@ macro_top <- wrap_plots(A,free(B),widths = c(1,3)) &
 
 
 set.seed(1)
-hupa_vs_peaks <- permTest(A = hupa_ranges,B = all_peaks_IP_mutH,ntimes = n,
-                         randomize.function = randomizeRegions, count.once=TRUE,
+hupa_vs_peaks <- permTest(B = hupa_ranges,A = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 set.seed(1)
-hupb_vs_peaks <- permTest(A = hupb_ranges,B = all_peaks_IP_mutH,ntimes = n,
-                         randomize.function = randomizeRegions, count.once=TRUE,
+hupb_vs_peaks <- permTest(B = hupb_ranges,A = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 set.seed(1)
-fis_vs_peaks <- permTest(A = fis_ranges,B = all_peaks_IP_mutH,ntimes = n,
-                         randomize.function = randomizeRegions, count.once=TRUE,
+fis_vs_peaks <- permTest(B = fis_ranges,A = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 set.seed(1)
-hns_vs_peaks <- permTest(A = hns_ranges,B = all_peaks_IP_mutH,ntimes = n,
-                         randomize.function = randomizeRegions, count.once=TRUE,
+hns_vs_peaks <- permTest(B = hns_ranges,A = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 set.seed(1)
-gapR_vs_peaks <- permTest(A = gapR_regions,B = all_peaks_IP_mutH,ntimes = n,
+gapR_vs_peaks <- permTest(B = gapR_regions,A = all_peaks_IP_mutH,ntimes = n,
                          randomize.function = randomizeRegions, count.once=TRUE,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 
@@ -2103,7 +2128,8 @@ top / middle / (G + plot_spacer() + plot_spacer()) & theme(plot.margin = margin(
 
 \onehalfspacing
 
-**Supplementary Figure 2. MutL-AR distribution in Macrodomains and nucleoid-associated proteins enrichment in MutL-AR .** **A)** Relative frequency of MutL-AR in each Macrodomain. **B)** Frequency of MutL-AR coverage for each Macrodomain. **C-G)** Histogram representing the Permutation test for the nucleoid-associated proteins (C) HupA, (D) HupB, (E) Fis, (F) H-NS, and (G) GapR. The grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
+**Supplementary Figure 2. MutL-AR distribution in macrodomains and nucleoid-associated proteins binding sites enrichment in MutL-AR. A)** Relative frequency of each macrodomain (MD) in the *E. coli* genome and in the MutL-AR. **B)** Fraction of MutL-AR coverage in each macrodomain. **C-G)** Histograms representing the Permutation test for nucleoid-associated proteins binding sites **C)** HupA, **D)** HupB, **E)** Fis, **F)** H-NS, and **G)** GapR. The grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR. The y-axis represents the relative likelihood of observing values within different regions of the data range (Density), and the x-axis represents the number of overlaps between the randomized/original MutL-AR and the criterion tested for association (Number of
+overlaps).
 
 \newpage
 
@@ -2142,6 +2168,7 @@ A <-
         axis.text = element_text(size = 7),
         axis.title = element_text(size = 7),
         legend.text = element_text(size = 7),
+        axis.ticks = element_line(size = .25),
         legend.key.size = unit(4,"mm"))+
     annotate("text",x = .2,y = 8.3,label = paste0("Wilcoxon test, p = ", scientific(stat_gc$p,digits = 2)),
             hjust = 0, size = 7/.pt)
@@ -2180,15 +2207,16 @@ B <-
         axis.text = element_text(size = 7),
         axis.title = element_text(size = 7),
         legend.text = element_text(size = 7),
+        axis.ticks = element_line(size = .25),
         legend.key.size = unit(4,"mm"))+
     annotate("text",x = 70,y = .15,label = paste0("Wilcoxon test, p = ", scientific(stat_tm$p,digits = 2)),
             hjust = 0, size = 7/.pt)
 
 
 set.seed(1)
-repetitivebases_vs_peaks <- permTest(A = repetitive_bases_ranges,
-                                      B = all_peaks_IP_mutH,ntimes = n,
-                          randomize.function = randomizeRegions, count.once=TRUE,
+repetitivebases_vs_peaks <- permTest(B = repetitive_bases_ranges,
+                                      A = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2236,10 +2264,10 @@ C <-
 }
 
 set.seed(1)
-cruciform_vs_peaks <- permTest(A = toGRanges(cruciform),
-                               B = all_peaks_IP_mutH,
+cruciform_vs_peaks <- permTest(B = toGRanges(cruciform),
+                               A = all_peaks_IP_mutH,
                                ntimes = n,
-                          randomize.function = randomizeRegions, count.once=TRUE,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2287,7 +2315,7 @@ D <-
 }
   
 set.seed(1)
-ssdna_vs_peaks <- permTest(A = GRanges(ssdna),B = all_peaks_IP_mutH,ntimes = n,
+ssdna_vs_peaks <- permTest(B = GRanges(ssdna),A = all_peaks_IP_mutH,ntimes = n,
                          randomize.function = randomizeRegions, count.once=TRUE,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 
@@ -2338,9 +2366,8 @@ E <-
 
 
 set.seed(1)
-GATC_vs_peaks <- permTest(A = GRanges(GATC_regions),B = all_peaks_IP_mutH,ntimes = n,
-                          randomize.function = randomizeRegions, 
-                          count.once=TRUE,
+GATC_vs_peaks <- permTest(B = GRanges(GATC_regions),A = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2456,14 +2483,13 @@ G <-
 
 \onehalfspacing
 
-**Supplementary Figure 3. Local DNA sequence properties of the MutL-AR.** **A)** Density plot showing the GC content distribution in E. coli genome and in MutL-AR. GC content was calculated using 200 bp bins. B**)** Density plot showing the melting temperature distribution in E. coli genome and in MutL-AR. Melting temperature was calculated using 200 bp bins. **C-F)** Histogram representing the Permutation test for **C)** the location of microsatellites (mononucleotide repeats of 4 nucleotides or more), **D)** the location of cruciform regions (obtained using CIRI), **E)** the location of ssDNA, and **F)** the location of GATC sites. **G)** Violin plots showing the frequency of GATC methylation for the genome and MutL-AR. For panels C, D, E, and F, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
+**Supplementary Figure 3. Local DNA sequence properties of the MutL-AR.** **A)** Density plot showing the GC content distribution in *E. coli* genome and in MutL-AR. GC content was calculated using 200 bp bins. B**)** Density plot showing the melting temperature distribution in the *E. coli* genome and in MutL-AR. Melting temperature was calculated using 200 bp bins. **C-F)** Histogram representing the Permutation test for **C)** the location of microsatellites (mononucleotide repeats of 4 nucleotides or more), **D)** the location of cruciform regions (obtained using CIRI), **E)** the location of ssDNA, and **F)** the location of GATC sites. **G)** Violin plots showing the frequency of GATC methylation (1) for the genome and MutL-AR. For panels C, D, E, and F, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR. The y-axis represents the relative likelihood of observing values within different regions of the data range (Density), and the x-axis represents the number of overlaps between the randomized/original MutL-AR and the criterion tested for association (Number of overlaps).
 
 \newpage
 
 ```{r Supp Figure 4, echo=FALSE, fig.height=3.5, fig.width=7, message=FALSE, warning=FALSE,fig.align='center'}
 
 # Prepare RNA-seq data
-peak_rna_mutH <- peak_rna_mutH %>% dplyr::rename("Start" = "start", "End" = "end")  
 rna_genes <- rbind(peak_rna_mutH, rnaseq_data)
 rna_genes_original <-rbind(peak_rna_mutH_original, rnaseq_data_original)
 
@@ -2484,14 +2510,15 @@ A <-
         axis.text = element_text(size = 7),
         axis.title = element_text(size = 7),
         legend.text = element_text(size = 7),
+        axis.ticks = element_line(size = .25),
         legend.key.size = unit(4,"mm"))+
     annotate("text",x = 0,y = 2.4,label = paste0("Wilcoxon test, p = ", scientific(stat_rna$p,digits = 2)),
             hjust = 0, size = 7/.pt)
 
 set.seed(1)
-rpob_vs_peaks <- permTest(A = rpob_regions,
-                                      B = all_peaks_IP_mutH,ntimes = n,
-                          randomize.function = randomizeRegions, count.once=TRUE,
+rpob_vs_peaks <- permTest(B = rpob_regions,
+                                      A = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2539,8 +2566,8 @@ B <-
 }
 
 set.seed(1)
-gyrA_vs_peaks <- permTest(A = gyra_regions,B = all_peaks_IP_mutH,ntimes = n,
-                         randomize.function = randomizeRegions, count.once=TRUE,
+gyrA_vs_peaks <- permTest(B = gyra_regions,A = all_peaks_IP_mutH,ntimes = n,
+                         randomize.function = randomizeRegions,
                          evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2588,9 +2615,9 @@ C <-
 }
   
 set.seed(1)
-g_quad_kaplan_vs_peaks <- permTest(A = g_quad_kaplan,
-                                      B = all_peaks_IP_mutH,ntimes = n,
-                          randomize.function = randomizeRegions, count.once=TRUE,
+g_quad_kaplan_vs_peaks <- permTest(B = g_quad_kaplan,
+                                      A = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 
@@ -2640,9 +2667,9 @@ D <-
 
 
 set.seed(1)
-g_quad_hunter_vs_peaks <- permTest(A = g_quad_hunter,
-                                      B = all_peaks_IP_mutH,ntimes = n,
-                          randomize.function = randomizeRegions, count.once=TRUE,
+g_quad_hunter_vs_peaks <- permTest(B = g_quad_hunter,
+                                      A = all_peaks_IP_mutH,ntimes = n,
+                          randomize.function = randomizeRegions,
                           evaluate.function = numOverlaps, genome = NC_000913.3)
 
 {
@@ -2698,20 +2725,24 @@ f <- ggplot(genes)+
   stat_pvalue_manual(direction_test,label = "p = {format(p, digits = 2)}",tip.length = 0, size = 7/.pt) +
   scale_y_continuous(name = "Relative frequency",expand = c(0,0,0.1,0),breaks = c(0,.25,.5,.75,1)) +
   #scale_x_discrete(guide = guide_axis(angle = 45))+
-  scale_fill_manual(name = "Gene orientation",values = c("grey","black"))+
+  scale_fill_manual(name = "Gene \norientation",values = c("grey","black"))+
   labs(tag = "F")+
   theme_pubr() +
-  theme(axis.title.x = element_blank(),legend.position = "none", legend.title = element_text(size = 7),
-        plot.tag = element_text(size = 10, face = "bold"),
+  theme(axis.title.x = element_blank(),legend.position = "inside", legend.title = element_text(size = 7),
+        legend.position.inside = c(1.1,.5),
+        legend.box.margin = margin(-10,-8,-10,-10),
+        legend.margin = margin(0,0,0,0),
+        plot.tag = element_text(size = 10, face = "bold"), plot.margin = margin(0,0,0,0),
         axis.line = element_line(size = .25),
         axis.text = element_text(size = 7),
         axis.title = element_text(size = 7),
+        axis.ticks = element_line(size = .25),
         legend.text = element_text(size = 7),
-        legend.key.size = unit(4,"mm"),aspect.ratio = 2)
+        legend.key.size = unit(4,"mm"))
 f
 
 
-(A + B + C) / (D + E + f) & theme(plot.margin = margin(0,5,0,0))
+(A + B + C) / (D + E + (f + guide_area() + plot_layout(guides = "collect",widths = c(1,.8)))) & theme(plot.margin = margin(0,5,0,0))
 
 #ggsave("Sup_Fig_4.pdf",width = 7,height = 4.7)
 
@@ -2719,42 +2750,4 @@ f
 
 \onehalfspacing
 
-**Supplementary Figure 4. Transcription activity within MutL-AR.** **A)** Density plot showing the Log10 transcription levels (REF) distribution in *E. coli* genome and in MutL-AR. **B-E)** Histogram representing the Permutation test for **B)** the location of RpoB binding sites, **C)** the location of GyrA binding sites, **D)** the location of G4-prone sequences from *Kaplan et al*., and **E)** the location of G4-prone sequences identified by G4Hunter. For panels **B-E**, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR.
-
-\newpage
-
-```{r Supp Figure 5, echo=FALSE, fig.height=5, fig.width=6, message=FALSE, warning=FALSE,fig.align='center'}
-library(ggfortify)
-library(ggplot2)
-
-### Import data ###
-data <- read_excel("Data/PCA_data.xlsx")
-PCA <- data[,-1:-4]
-rownames(PCA) <- data$`MutL-AR`
-
-PCA_data <- PCA %>% select(contains("rel"),`GC Content`,`Melting temp.`) 
-
-names(PCA_data) <- gsub(x = names(PCA_data),pattern = "_rel",replacement = "")
-
-### Do PCA ###
-res_PCA <- prcomp(PCA_data, scale. = T)
-
-### Plot PCA ###
-fviz_pca_biplot(res_PCA,repel = T, habillage = data$Ribosomal_tRNA,
-                labelsize = 3, pointsize = 2, pointshape = 20,
-                mean.point = F, palette = c("darkgrey","black"))+
-  theme_pubr()+
-  labs(color = "Ribosomal/tRNA",
-       shape = "Ribosomal/tRNA", 
-       fill = "Ribosomal/tRNA")+
-  theme(legend.position = "inside", legend.position.inside = c(.1,.9),
-        text = element_text(size = 7), 
-        legend.key.size = unit(1, "mm"))
-
-#ggsave("Sup_Fig_5.pdf",width = 6,height = 5)
-
-```
-
-\onehalfspacing
-
-**Supplementary Figure 5. Factors associated with MutL-AR.** Principal Component analysis (PCA) Biplot of MutL-AR and associated factors. The first two principal components are displayed in the axis, explaining a total of 52.7% of the total variance. Each numbered point correspond to a specific MutL-AR **(Supp. Table 1)**. Black points indicate MutL-AR that include ribosomal and/or tRNAs, while grey points indicate the opposite. The blue arrows represent the factors associated with MutL-AR, with the direction of the arrow indicating the direction in which each factor increases while the length of the arrow represents the strength of each factor influence on the principal components. Arrows that are closely located or point to the same direction suggest a positive correlation of those factors. Arrows pointing in opposite direction indicate factors that are negatively correlated.
+**Supplementary Figure 4. Transcription activity within MutL-AR.** **A)** Density plot showing the Log10 transcription levels per gene in *E. coli* genome and in MutL-AR. Transcription level per gene was obtained from Niccum *et al.* **B-E)** Histogram representing the Permutation test for **B)** the location of RpoB binding sites, **C)** the location of GyrA binding sites, **D)** the location of G4-prone sequences from *Kaplan et al*., and **E)** the location of G4-prone sequences identified by G4Hunter. **(F)** Relative frequency of gene orientation in the genome and in MutL-AR. For panels **B-E**, the grey bars indicate the number of overlaps observed after 1000 permutations. The black curve indicates the normal distribution of the permutations. The black vertical line indicates the mean number of overlaps after 1000 permutations and the red line indicates the observed number of overlaps in the MutL-AR. The y-axis represents the relative likelihood of observing values within different regions of the data range (Density), and the x-axis represents the number of overlaps between the randomized/original MutL-AR and the criterion tested for association(Number of overlaps). For panel **F** a Binomial test was used.
